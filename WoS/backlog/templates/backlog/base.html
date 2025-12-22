@@ -1,29 +1,37 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}WoS{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/light.css' %}">
+    <link rel="stylesheet" href="{% static 'css/dark.css' %}">
 </head>
 <body>
     <header>
-        <h1>Welcome to WoS (WSJF on Steroids)</h1>
-        <nav>
-            <ul>
-                <li><a href="{% url 'backlog:index' %}">Home</a></li>
-                <li><a href="{% url 'backlog:epics' %}">Epics</a></li>
-                <li><a href="{% url 'backlog:stories' %}">Stories</a></li>
-            </ul>
-        </nav>
+        <div class="container header-row">
+            <div class="brand">
+                <h1>WoS</h1>
+                <div class="tag">WSJF on Steroids</div>
+            </div>
+            <nav class="main-nav">
+                <a class="btn" href="{% url 'admin:index' %}">Admin</a>
+                <a class="btn" href="{% url 'backlog:overview' %}">Epics</a>
+                <a class="btn" href="{% url 'backlog:stories' %}">Stories</a>
+                <a class="btn" href="{% url 'backlog:report' %}">Report</a>
+                <a class="btn" href="{% url 'backlog:kanban' %}">Kanban</a>
+            </nav>
+            <div class="header-actions">
+                <button id="theme-toggle" title="Toggle theme" class="icon-btn">🌙</button>
+            </div>
+        </div>
     </header>
     <main>
         {% block content %}
         {% endblock %}
     </main>
-    <footer>
-        <p>&copy; {{ current_year }} WoS. All rights reserved.</p>
-    </footer>
     <script src="{% static 'js/app.js' %}"></script>
 </body>
 </html>

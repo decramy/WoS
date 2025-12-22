@@ -1,0 +1,71 @@
+{% extends 'backlog/base.html' %}
+{% block title %}Report — WoS{% endblock %}
+{% block content %}
+<h2>Stories report</h2>
+
+<p>Per-section averages (value and cost) and overall result (value / cost).</p>
+
+<table class="report-table">
+	<thead>
+		<tr>
+			<th>Epic</th>
+			<th>Story</th>
+			{% for vs in value_sections %}
+				<th>V: {{ vs.name }}</th>
+			{% endfor %}
+			<th>Total Value</th>
+			{% for cs in cost_sections %}
+				<th>C: {{ cs.name }}</th>
+			{% endfor %}
+			<th>Total Cost</th>
+			<th>Result</th>
+		</tr>
+	</thead>
+	<tbody>
+		{% for r in rows %}
+			<tr class="result-{{ r.result_class }}">
+				<td>{{ r.story.epic.title }}</td>
+				<td>{{ r.story.title }}</td>
+				{% for avg in r.value_section_avgs %}
+					<td>
+						{% if avg is not None %}
+							{{ avg|floatformat:2 }}
+						{% else %}
+							—
+						{% endif %}
+					</td>
+				{% endfor %}
+				<td>{{ r.value_sum }}</td>
+				{% for avg in r.cost_section_avgs %}
+					<td>
+						{% if avg is not None %}
+							{{ avg|floatformat:2 }}
+						{% else %}
+							—
+						{% endif %}
+					</td>
+				{% endfor %}
+				<td>{{ r.cost_sum }}</td>
+				<td>
+					{% if r.result is None %}
+						—
+					{% else %}
+						{{ r.result|floatformat:2 }}
+					{% endif %}
+				</td>
+			</tr>
+		{% empty %}
+			<tr><td colspan="{{ total_cols }}">No stories found.</td></tr>
+		{% endfor %}
+	</tbody>
+</table>
+
+<style>
+	.report-table { border-collapse: collapse; width: 100%; }
+	.report-table th, .report-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+	.report-table tr.result-good { background: #e6ffed; }
+	.report-table tr.result-bad { background: #fff2f0; }
+	.report-table tr.result-neutral { background: #f6f6f6; }
+</style>
+
+{% endblock %}

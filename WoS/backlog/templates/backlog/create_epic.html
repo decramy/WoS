@@ -1,0 +1,22 @@
+{% extends 'backlog/base.html' %}
+
+{% block title %}Create Epic — WoS{% endblock %}
+
+{% block content %}
+<h2>Create Epic</h2>
+<form method="post" action="">
+  {% csrf_token %}
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:640px">
+    <label>Title
+      <input type="text" name="title" required>
+    </label>
+    <label>Description
+      <textarea name="description" rows="4"></textarea>
+    </label>
+    <div>
+      <button type="submit" class="btn">Create</button>
+      <a href="{% url 'backlog:overview' %}" style="margin-left:12px">Cancel</a>
+    </div>
+  </div>
+</form>
+{% endblock %}

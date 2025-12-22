@@ -1,0 +1,66 @@
+{% extends 'backlog/base.html' %}
+{% load static %}
+
+{% block title %}Backlog — Epics{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h2>Backlog — Epics</h2>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'backlog:create_epic' %}">+ Create Epic</a>
+  </div>
+</div>
+
+<form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  <input name="q" placeholder="Search epics" value="{{ q }}">
+  <label>Sort
+    <select name="sort">
+      <option value="title" {% if sort == 'title' %}selected{% endif %}>Title</option>
+      <option value="created" {% if sort == 'created' %}selected{% endif %}>Created</option>
+      <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Updated</option>
+      <option value="stories" {% if sort == 'stories' %}selected{% endif %}># Stories</option>
+    </select>
+  </label>
+  <label>
+    <select name="order">
+      <option value="asc" {% if order == 'asc' %}selected{% endif %}>Asc</option>
+      <option value="desc" {% if order == 'desc' %}selected{% endif %}>Desc</option>
+    </select>
+  </label>
+  <button class="btn" type="submit">Apply</button>
+</form>
+
+<table class="overview-table" style="margin-top:12px;">
+  <thead>
+    <tr>
+      <th>Actions</th>
+      <th>Epic</th>
+      <th>Stories</th>
+      <th>Target (snippet)</th>
+      <th>Workitems (snippet)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in epics %}
+      <tr>
+        <td style="white-space:nowrap;">
+          <form method="post" action="" style="display:inline;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="delete_epic">
+            <input type="hidden" name="epic_id" value="{{ item.epic.id }}">
+            <button type="submit" title="Delete" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">🗑️</button>
+          </form>
+          <a href="{% url 'backlog:stories' %}?epic={{ item.epic.id }}" title="View stories" style="margin-left:8px;">📄</a>
+        </td>
+        <td><a href="{% url 'backlog:stories' %}?epic={{ item.epic.id }}">{{ item.epic.title }}</a></td>
+        <td>{{ item.epic.stories.count }}</td>
+        <td>{{ item.target|default:'-' }}</td>
+        <td>{{ item.workitems|default:'-' }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4">No epics yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

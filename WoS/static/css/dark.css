@@ -1,0 +1,66 @@
+/* Dark theme for WoS - minimal modern look */
+body.dark{
+  --bg:#0b0f14;
+  --panel:#0f1720;
+  --muted:#9aa8b2;
+  --text:#e6eef8;
+  --accent:#4f9cff;
+  --accent-2:#16a34a;
+  --danger:#ff6b6b;
+  --border: rgba(255,255,255,0.06);
+
+  background:var(--bg);
+  color:var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  margin:0;
+}
+
+body.dark header{
+  background:linear-gradient(90deg, rgba(15,23,42,0.9), rgba(7,10,14,0.9));
+  padding:16px 20px;
+  border-bottom:1px solid var(--border);
+}
+
+body.dark h1{ margin:0 0 8px 0; font-size:18px; font-weight:600 }
+body.dark nav ul{ list-style:none; padding:0; margin:0; display:flex; gap:12px }
+body.dark nav a{ color:var(--muted); text-decoration:none }
+body.dark nav a:hover{ color:var(--text) }
+
+body.dark main{ padding:20px }
+
+body.dark .overview-table{ width:100%; border-collapse:collapse; margin-top:12px }
+body.dark .overview-table th, body.dark .overview-table td{ padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.04); text-align:left }
+body.dark .overview-table th{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); color:var(--muted); font-weight:700; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.06) }
+body.dark .overview-table tr:hover td{ background: rgba(255,255,255,0.01) }
+
+body.dark button, body.dark input[type=button], body.dark .btn{ background:var(--accent); color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer }
+body.dark button[title], body.dark a[title]{ opacity:0.95 }
+
+body.dark input, body.dark textarea, body.dark select{
+  background:var(--panel);
+  color:var(--text);
+  border:1px solid var(--border);
+  padding:6px 8px;
+  border-radius:6px;
+}
+
+body.dark select{ min-width:64px }
+
+body.dark .help{ color:var(--muted); font-size:14px }
+
+/* story link and action styling */
+body.dark a.edit-toggle{ font-size:15px; text-decoration:none; color:var(--accent-2); }
+body.dark a.edit-toggle:hover{ color:var(--accent); }
+
+body.dark a[title="Refine"]{ font-size:16px; text-decoration:none }
+
+/* tooltip hint via title attribute handled by browser; keep help text readable */
+
+body.dark .footer{ margin-top:24px; color:var(--muted); font-size:13px }
+
+/* small responsive tweak for epic inline form */
+body.dark #epic-create input[name="title"]{ min-width:200px }
+body.dark #epic-create input[name="description"]{ min-width:280px }
+
+/* button contrast */
+body.dark .btn{ background:var(--accent); color:#0b1220; font-weight:600 }

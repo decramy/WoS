@@ -1,0 +1,63 @@
+{% extends 'backlog/base.html' %}
+{% load static %}
+
+{% block title %}Stories — WoS{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h2>Stories</h2>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'backlog:create_story_refine' %}">+ Create Story</a>
+  </div>
+</div>
+
+<form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  <input name="q" placeholder="Search stories" value="{{ q }}">
+  <label>Sort
+    <select name="sort">
+      <option value="epic" {% if sort == 'epic' %}selected{% endif %}>Epic</option>
+      <option value="title" {% if sort == 'title' %}selected{% endif %}>Title</option>
+      <option value="created" {% if sort == 'created' %}selected{% endif %}>Created</option>
+      <option value="status" {% if sort == 'status' %}selected{% endif %}>Status</option>
+    </select>
+  </label>
+  <label>
+    <select name="order">
+      <option value="asc" {% if order == 'asc' %}selected{% endif %}>Asc</option>
+      <option value="desc" {% if order == 'desc' %}selected{% endif %}>Desc</option>
+    </select>
+  </label>
+  {% if epic_id %}
+    <a class="btn" href="{% url 'backlog:stories' %}">Clear epic filter</a>
+  {% endif %}
+  <button class="btn" type="submit">Apply</button>
+</form>
+<table class="overview-table" style="margin-top:12px;">
+  <thead>
+    <tr>
+      <th>Actions</th>
+      <th>Epic</th>
+      <th>Story</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in stories %}
+      <tr>
+        <td style="white-space:nowrap;">
+          <a href="{% url 'backlog:refine_story' s.id %}" title="Refine">🔧</a>
+          <form method="post" action="{% url 'backlog:overview' %}" style="display:inline;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="delete_story">
+            <input type="hidden" name="story_id" value="{{ s.id }}">
+            <button type="submit" title="Delete" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">🗑️</button>
+          </form>
+        </td>
+        <td>{{ s.epic.title }}</td>
+        <td>{{ s.title }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3">No stories found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

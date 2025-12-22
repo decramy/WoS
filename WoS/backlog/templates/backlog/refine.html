@@ -1,0 +1,43 @@
+{% extends 'backlog/base.html' %}
+
+{% block title %}Refine Story — {{ story.title }}{% endblock %}
+
+{% block content %}
+  <h2>Refine: {{ story.title }}</h2>
+  <form method="post" action="">
+    {% csrf_token %}
+      <input type="hidden" name="story_id" value="{{ story.id }}">
+      <input type="hidden" name="action" value="edit_story">
+      <div>
+        <label>Title</label>
+        <input type="text" name="title" value="{{ story.title }}" style="width:100%;">
+      </div>
+      <div>
+        <label>Epic</label>
+        <select name="epic_id" style="width:100%">
+          <option value="">Choose epic</option>
+          {% if epics %}
+            {% for e in epics %}
+              <option value="{{ e.id }}" {% if story.epic and e.id == story.epic.id %}selected{% endif %}>{{ e.title }}</option>
+            {% endfor %}
+          {% else %}
+            <option disabled>No epics available</option>
+          {% endif %}
+        </select>
+      </div>
+      <div>
+        <label>Target<br>
+          <textarea name="target" rows="3" style="width:100%;">{{ story.target }}</textarea>
+        </label>
+      </div>
+      <div>
+        <label>Work items<br>
+          <textarea name="workitems" rows="6" style="width:100%;">{{ story.workitems }}</textarea>
+        </label>
+      </div>
+      <div style="margin-top:8px;">
+        <button type="submit">Save</button>
+        <a href="{% url 'backlog:overview' %}">Back</a>
+      </div>
+  </form>
+{% endblock %}
