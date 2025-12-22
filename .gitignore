@@ -1,0 +1,26 @@
+# Python
+*.py[cod]
+__pycache__/
+*.so
+*.egg-info/
+*.egg
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+dist/
+# Django
+*.sqlite3
+db.sqlite3
+/media
+staticfiles
+# VSCode and JetBrains
+.vscode/
+.idea/
+# env files
+.env
+.venv
+# system
+.DS_Store
