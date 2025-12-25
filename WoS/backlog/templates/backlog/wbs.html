@@ -1,0 +1,822 @@
+{% extends 'backlog/base.html' %}
+{% load static %}
+{% block title %}WBS — WoS{% endblock %}
+{% block content %}
+<div class="page-head">
+	<h2>🗂️ Work Breakdown Structure</h2>
+	<div class="page-actions">
+		<a class="btn" href="{% url 'backlog:create_story_refine' %}">+ Create Story</a>
+	</div>
+</div>
+
+<div class="page-hint">
+	<strong>💡 WBS &amp; Dependencies:</strong> Visualize your project timeline and story dependencies.
+	The <strong>Gantt chart</strong> shows estimated effort (cost). Use <strong>Connection Mode</strong> to link stories
+	— arrows show which stories must be completed before others can start.
+</div>
+
+<form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+	<label for="epic-select">📁 Epic:</label>
+	<select id="epic-select" name="epic" onchange="this.form.submit()">
+		<option value="">All Epics</option>
+		{% for e in all_epics %}
+			<option value="{{ e.id }}" {% if e.id|stringformat:"s" == epic_id|stringformat:"s" %}selected{% endif %}>{{ e.title }}</option>
+		{% endfor %}
+	</select>
+	<button class="btn" type="submit">Filter</button>
+</form>
+
+<!-- Dependency Creation Form -->
+<div class="wbs-form-section">
+	<h3>Create Dependency</h3>
+	<div class="wbs-form-row">
+		<label>Story</label>
+		<select id="dep-story-select">
+			<option value="">Select a story...</option>
+			{% for s in all_stories %}
+				<option value="{{ s.id }}">{{ s.epic.title }} → {{ s.title }}</option>
+			{% endfor %}
+		</select>
+		<span class="form-label">depends on</span>
+		<select id="dep-depends-on-select">
+			<option value="">Select a story...</option>
+			{% for s in all_stories %}
+				<option value="{{ s.id }}">{{ s.epic.title }} → {{ s.title }}</option>
+			{% endfor %}
+		</select>
+		<button class="btn btn-primary" id="add-dep-btn">Add Dependency</button>
+	</div>
+	<div id="form-message" class="form-message"></div>
+</div>
+
+<!-- Connection Mode Toggle -->
+<div class="wbs-mode-toggle">
+	<label>
+		<input type="checkbox" id="connect-mode"> 
+		<span class="mode-label">🔗 Connection Mode</span>
+		<span class="mode-hint">(Click a story row to start, then click another to create dependency)</span>
+	</label>
+	<span id="connect-status" class="connect-status"></span>
+</div>
+
+<!-- Gantt Chart: Cost-based bar visualization -->
+<div class="gantt-section">
+	<h3>📊 Gantt Chart (Cost-based)</h3>
+	<p class="gantt-description">Bar width = cost (1 unit = square). Sorted by dependency depth. In Connection Mode: click rows to link, click arrows to remove.</p>
+	
+	<div class="gantt-container">
+		<svg id="gantt-svg" class="gantt-svg"></svg>
+		<div class="gantt-chart" id="gantt-chart">
+			{% for story in gantt_data %}
+			<div class="gantt-row" data-id="{{ story.id }}" data-cost="{{ story.cost }}" data-cost-percent="{{ story.cost_percent }}">
+				<div class="gantt-label">
+					<span class="gantt-epic">{{ story.epic_title }}</span>
+					<a href="{% url 'backlog:refine_story' story.id %}" class="gantt-title">{{ story.title }}</a>
+				</div>
+				<div class="gantt-bar-container">
+					<div class="gantt-bar status-{{ story.status }}" data-status="{{ story.status }}">
+						<span class="gantt-bar-label">{% if story.cost > 0 %}{{ story.cost }}{% endif %}</span>
+					</div>
+				</div>
+			</div>
+			{% empty %}
+			<div class="gantt-empty">📋 No stories found. Create some stories to build your WBS!</div>
+			{% endfor %}
+		</div>
+	</div>
+	
+	<div class="gantt-scale">
+		<span>0</span>
+		<span>Cost Scale (bar width = cost, bar position = dependency chain)</span>
+		<span>{{ max_cost }}</span>
+	</div>
+</div>
+
+<!-- Legend -->
+<div class="wbs-legend">
+	<h4>Legend</h4>
+	<div class="legend-items">
+		<div class="legend-item"><span class="legend-color status-idea"></span> Idea</div>
+		<div class="legend-item"><span class="legend-color status-ready"></span> Ready</div>
+		<div class="legend-item"><span class="legend-color status-planned"></span> Planned</div>
+		<div class="legend-item"><span class="legend-color status-started"></span> Started</div>
+		<div class="legend-item"><span class="legend-color status-blocked"></span> Blocked</div>
+		<div class="legend-item"><span class="legend-color status-done"></span> Done</div>
+		<div class="legend-item"><span class="legend-line"></span> Dependency line</div>
+	</div>
+</div>
+
+<!-- Ensure CSRF cookie is set for fetch requests -->
+<form style="display:none">{% csrf_token %}</form>
+
+<style>
+.wbs-form-section {
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 16px;
+	margin-bottom: 16px;
+}
+.wbs-form-section h3 {
+	margin: 0 0 12px 0;
+	font-size: 14px;
+	color: var(--text-secondary);
+}
+.wbs-form-row {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.wbs-form-row label {
+	font-weight: 600;
+}
+.wbs-form-row select {
+	padding: 8px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	min-width: 200px;
+}
+.wbs-form-row .form-label {
+	color: var(--text-secondary);
+	font-style: italic;
+}
+.form-message {
+	margin-top: 8px;
+	font-size: 13px;
+}
+.form-message.success { color: var(--accent-2); }
+.form-message.error { color: var(--danger); }
+
+.wbs-mode-toggle {
+	margin-bottom: 16px;
+	padding: 10px 16px;
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+.wbs-mode-toggle label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+}
+.mode-label {
+	font-weight: 600;
+}
+.mode-hint {
+	font-size: 12px;
+	color: var(--text-secondary);
+}
+.connect-status {
+	font-weight: 600;
+	color: var(--accent);
+}
+
+/* Gantt Chart Styles */
+.gantt-section {
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 16px;
+}
+.gantt-section h3 {
+	margin: 0 0 8px 0;
+	font-size: 16px;
+}
+.gantt-description {
+	margin: 0 0 16px 0;
+	font-size: 13px;
+	color: var(--text-secondary);
+}
+.gantt-container {
+	position: relative;
+	overflow-x: auto;
+}
+.gantt-svg {
+	position: absolute;
+	top: 0;
+	left: 0;
+	pointer-events: none;
+	z-index: 3;
+}
+.gantt-svg line {
+	stroke: var(--accent);
+	stroke-width: 2;
+	marker-end: url(#gantt-arrow);
+}
+.gantt-svg line.dep-line {
+	pointer-events: auto;
+	cursor: pointer;
+}
+.gantt-svg line.dep-line:hover {
+	stroke-width: 3;
+}
+.gantt-svg.connect-mode line.dep-line {
+	stroke: var(--danger);
+	opacity: 0.7;
+}
+.gantt-svg.connect-mode line.dep-line:hover {
+	stroke-width: 4;
+	opacity: 1;
+}
+.gantt-chart {
+	position: relative;
+	z-index: 2;
+	min-width: 100%;
+}
+.gantt-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--border);
+	cursor: default;
+	transition: background 0.15s;
+}
+.gantt-row:last-child {
+	border-bottom: none;
+}
+.gantt-row:hover {
+	background: var(--surface);
+}
+.gantt-row.connect-source {
+	background: rgba(37,99,235,0.1);
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.gantt-row.connect-hover {
+	background: rgba(11,107,58,0.1);
+	outline: 2px solid var(--accent-2);
+	outline-offset: -2px;
+}
+.gantt-label {
+	width: 250px;
+	min-width: 250px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-left: 8px;
+}
+.gantt-epic {
+	font-size: 10px;
+	color: var(--text-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+.gantt-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text);
+	text-decoration: none;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.gantt-title:hover {
+	color: var(--accent);
+}
+.gantt-bar-container {
+	flex: 1;
+	height: 22px;
+	background: var(--bg);
+	border-radius: 4px;
+	position: relative;
+	min-width: 600px;
+}
+.gantt-bar {
+	position: absolute;
+	top: 3px;
+	height: 16px;
+	border-radius: 2px;
+	min-width: 16px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: left 0.3s ease, width 0.3s ease;
+	box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.gantt-bar.status-idea { background: linear-gradient(90deg, #9ca3af, #6b7280); }
+.gantt-bar.status-ready { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+.gantt-bar.status-planned { background: linear-gradient(90deg, #60a5fa, #3b82f6); }
+.gantt-bar.status-started { background: linear-gradient(90deg, #34d399, #10b981); }
+.gantt-bar.status-blocked { background: linear-gradient(90deg, #f87171, #ef4444); }
+.gantt-bar.status-done { background: linear-gradient(90deg, #34d399, #059669); }
+.gantt-bar-label {
+	font-size: 9px;
+	font-weight: 600;
+	color: white;
+	text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+	padding: 0 2px;
+	white-space: nowrap;
+}
+.gantt-empty {
+	padding: 40px 20px;
+	text-align: center;
+	color: var(--text-secondary);
+}
+.gantt-scale {
+	display: flex;
+	justify-content: space-between;
+	margin-top: 8px;
+	padding: 8px 8px 8px 258px;
+	font-size: 11px;
+	color: var(--text-secondary);
+}
+.gantt-scale span:nth-child(2) {
+	flex: 1;
+	text-align: center;
+}
+
+.wbs-legend {
+	margin-top: 16px;
+	padding: 12px 16px;
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+.wbs-legend h4 {
+	margin: 0 0 8px 0;
+	font-size: 13px;
+	color: var(--text-secondary);
+}
+.legend-items {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+}
+.legend-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+}
+.legend-color {
+	width: 16px;
+	height: 16px;
+	border-radius: 4px;
+}
+.status-idea { background: #9ca3af; }
+.status-ready { background: #fbbf24; }
+.status-planned { background: #60a5fa; }
+.status-started { background: #34d399; }
+.status-blocked { background: #f87171; }
+.status-done { background: #34d399; border: 2px solid #059669; }
+.legend-line {
+	width: 30px;
+	height: 2px;
+	background: var(--accent);
+}
+
+/* Context menu for removing dependencies */
+.context-menu {
+	position: fixed;
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+	padding: 4px 0;
+	z-index: 1000;
+	display: none;
+}
+.context-menu.show { display: block; }
+.context-menu button {
+	display: block;
+	width: 100%;
+	padding: 8px 16px;
+	border: none;
+	background: none;
+	text-align: left;
+	cursor: pointer;
+	font-size: 13px;
+}
+.context-menu button:hover {
+	background: var(--bg);
+}
+.context-menu button.danger {
+	color: var(--danger);
+}
+
+@media (max-width: 768px) {
+	.gantt-label {
+		width: 150px;
+		min-width: 150px;
+	}
+	.gantt-scale {
+		padding-left: 158px;
+	}
+	.gantt-bar-container {
+		min-width: 250px;
+	}
+}
+</style>
+
+<script>
+(function() {
+	// Data from Django
+	const storiesData = {{ stories_json|safe }};
+	const dependenciesData = {{ dependencies_json|safe }};
+	const maxCost = {{ max_cost }};
+	
+	// DOM elements
+	const ganttSvg = document.getElementById('gantt-svg');
+	const ganttChart = document.getElementById('gantt-chart');
+	const ganttContainer = document.querySelector('.gantt-container');
+	const connectModeCheckbox = document.getElementById('connect-mode');
+	const connectStatus = document.getElementById('connect-status');
+	const addDepBtn = document.getElementById('add-dep-btn');
+	const depStorySelect = document.getElementById('dep-story-select');
+	const depDependsOnSelect = document.getElementById('dep-depends-on-select');
+	const formMessage = document.getElementById('form-message');
+	
+	// State
+	let connectMode = false;
+	let connectSource = null;
+	let dependencies = [...dependenciesData];
+	
+	// Build lookup maps
+	const storyDataMap = {};
+	storiesData.forEach(s => storyDataMap[s.id] = s);
+	
+	// CSRF token helper
+	function getCookie(name) {
+		const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+		return v ? v.pop() : '';
+	}
+	const csrftoken = getCookie('csrftoken');
+	
+	// Create SVG arrowhead marker
+	function createArrowMarker() {
+		const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+		const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+		marker.setAttribute('id', 'gantt-arrow');
+		marker.setAttribute('markerWidth', '10');
+		marker.setAttribute('markerHeight', '7');
+		marker.setAttribute('refX', '9');
+		marker.setAttribute('refY', '3.5');
+		marker.setAttribute('orient', 'auto');
+		
+		const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+		polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
+		polygon.setAttribute('fill', 'var(--accent)');
+		
+		marker.appendChild(polygon);
+		defs.appendChild(marker);
+		ganttSvg.appendChild(defs);
+	}
+	
+	// Cost unit size in pixels (cost 1 = 16px square)
+	const COST_UNIT_PX = 16;
+	
+	// Calculate the start position for each story based on dependencies (in pixels)
+	function calculateBarPositions() {
+		const barPositions = {}; // storyId -> { startPx, widthPx }
+		
+		// Helper to get the max end position (in px) of all dependencies
+		function getMaxDependencyEnd(storyId, visited = new Set()) {
+			if (visited.has(storyId)) return 0; // Circular dependency protection
+			visited.add(storyId);
+			
+			// Find all stories this story depends on
+			const deps = dependencies.filter(d => d.from_id === storyId);
+			if (deps.length === 0) return 0;
+			
+			let maxEnd = 0;
+			for (const dep of deps) {
+				const depStory = storyDataMap[dep.to_id];
+				if (!depStory) continue;
+				
+				// Recursively get where that dependency ends
+				const depStart = getMaxDependencyEnd(dep.to_id, new Set(visited));
+				const depWidth = Math.max(depStory.cost, 1) * COST_UNIT_PX;
+				const depEnd = depStart + depWidth;
+				maxEnd = Math.max(maxEnd, depEnd);
+			}
+			
+			return maxEnd;
+		}
+		
+		// Calculate positions for all stories
+		storiesData.forEach(story => {
+			const startPx = getMaxDependencyEnd(story.id);
+			const widthPx = Math.max(story.cost, 1) * COST_UNIT_PX; // Min 1 unit
+			barPositions[story.id] = { startPx, widthPx };
+		});
+		
+		return barPositions;
+	}
+	
+	// Calculate dependency depth for sorting (how many levels of dependents)
+	function calculateDepthScores() {
+		const depthScores = {};
+		
+		// Count how many stories depend on this story (directly or indirectly)
+		function countDependents(storyId, visited = new Set()) {
+			if (visited.has(storyId)) return 0;
+			visited.add(storyId);
+			
+			// Find stories that depend on this one
+			const dependents = dependencies.filter(d => d.to_id === storyId);
+			let count = dependents.length;
+			
+			for (const dep of dependents) {
+				count += countDependents(dep.from_id, new Set(visited));
+			}
+			
+			return count;
+		}
+		
+		storiesData.forEach(story => {
+			depthScores[story.id] = countDependents(story.id);
+		});
+		
+		return depthScores;
+	}
+	
+	// Sort and position bars based on dependencies
+	function positionBars() {
+		const positions = calculateBarPositions();
+		const depthScores = calculateDepthScores();
+		
+		// Get all rows and sort them
+		const rows = Array.from(document.querySelectorAll('.gantt-row'));
+		rows.sort((a, b) => {
+			const aId = parseInt(a.dataset.id);
+			const bId = parseInt(b.dataset.id);
+			const aDepth = depthScores[aId] || 0;
+			const bDepth = depthScores[bId] || 0;
+			// Higher depth (more dependents) = higher in list
+			return bDepth - aDepth;
+		});
+		
+		// Reorder DOM
+		rows.forEach(row => ganttChart.appendChild(row));
+		
+		// Position bars
+		rows.forEach(row => {
+			const storyId = parseInt(row.dataset.id);
+			const pos = positions[storyId];
+			const bar = row.querySelector('.gantt-bar');
+			
+			if (bar && pos) {
+				bar.style.left = pos.startPx + 'px';
+				bar.style.width = pos.widthPx + 'px';
+			}
+		});
+		
+		return positions;
+	}
+	
+	// Draw dependency lines in SVG
+	function drawGanttDependencies() {
+		if (!ganttSvg || !ganttContainer) return;
+		
+		// Clear existing lines (keep defs)
+		ganttSvg.querySelectorAll('line').forEach(l => l.remove());
+		
+		const containerRect = ganttContainer.getBoundingClientRect();
+		
+		// Set SVG size
+		ganttSvg.style.width = ganttChart.scrollWidth + 'px';
+		ganttSvg.style.height = ganttChart.offsetHeight + 'px';
+		ganttSvg.setAttribute('width', ganttChart.scrollWidth);
+		ganttSvg.setAttribute('height', ganttChart.offsetHeight);
+		
+		dependencies.forEach(dep => {
+			const fromRow = document.querySelector(`.gantt-row[data-id="${dep.from_id}"]`);
+			const toRow = document.querySelector(`.gantt-row[data-id="${dep.to_id}"]`);
+			
+			if (fromRow && toRow) {
+				const fromBar = fromRow.querySelector('.gantt-bar');
+				const toBar = toRow.querySelector('.gantt-bar');
+				
+				if (fromBar && toBar) {
+					const fromRowRect = fromRow.getBoundingClientRect();
+					const toRowRect = toRow.getBoundingClientRect();
+					const fromBarRect = fromBar.getBoundingClientRect();
+					const toBarRect = toBar.getBoundingClientRect();
+					
+					// Arrow goes FROM the dependency (toRow/toBar - right side) 
+					// TO the dependent story (fromRow/fromBar - left side)
+					// Because: from_id depends_on to_id, so to_id must finish before from_id starts
+					
+					// Start: right side of the dependency bar (toBar)
+					const startX = toBarRect.right - containerRect.left;
+					const startY = toRowRect.top - containerRect.top + toRowRect.height / 2;
+					
+					// End: left side of the dependent bar (fromBar)
+					const endX = fromBarRect.left - containerRect.left;
+					const endY = fromRowRect.top - containerRect.top + fromRowRect.height / 2;
+					
+					const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+					line.setAttribute('x1', startX);
+					line.setAttribute('y1', startY);
+					line.setAttribute('x2', endX);
+					line.setAttribute('y2', endY);
+					line.classList.add('dep-line');
+					line.setAttribute('data-from', dep.from_id);
+					line.setAttribute('data-to', dep.to_id);
+					line.style.pointerEvents = 'auto';
+					
+					// Click to remove in connection mode, right-click otherwise
+					line.addEventListener('click', async (e) => {
+						if (connectMode) {
+							e.preventDefault();
+							e.stopPropagation();
+							await removeDependency(dep.from_id, dep.to_id);
+						}
+					});
+					
+					// Right-click to remove (always works)
+					line.addEventListener('contextmenu', (e) => {
+						e.preventDefault();
+						showContextMenu(e.pageX, e.pageY, dep.from_id, dep.to_id);
+					});
+					
+					ganttSvg.appendChild(line);
+				}
+			}
+		});
+	}
+	
+	// Context menu for removing dependencies
+	let contextMenu = null;
+	function createContextMenu() {
+		contextMenu = document.createElement('div');
+		contextMenu.className = 'context-menu';
+		contextMenu.innerHTML = '<button class="danger" id="remove-dep-btn">🗑 Remove Dependency</button>';
+		document.body.appendChild(contextMenu);
+		
+		document.addEventListener('click', () => {
+			contextMenu.classList.remove('show');
+		});
+	}
+	
+	function showContextMenu(x, y, fromId, toId) {
+		contextMenu.style.left = x + 'px';
+		contextMenu.style.top = y + 'px';
+		contextMenu.classList.add('show');
+		
+		const btn = document.getElementById('remove-dep-btn');
+		btn.onclick = async () => {
+			await removeDependency(fromId, toId);
+			contextMenu.classList.remove('show');
+		};
+	}
+	
+	// Connect mode handlers
+	connectModeCheckbox.addEventListener('change', () => {
+		connectMode = connectModeCheckbox.checked;
+		connectSource = null;
+		connectStatus.textContent = connectMode ? 'Click rows to connect, click arrows to remove...' : '';
+		document.querySelectorAll('.gantt-row').forEach(n => n.classList.remove('connect-source', 'connect-hover'));
+		// Toggle SVG class for arrow styling
+		if (connectMode) {
+			ganttSvg.classList.add('connect-mode');
+		} else {
+			ganttSvg.classList.remove('connect-mode');
+		}
+	});
+	
+	// Row click handler for connection mode
+	document.querySelectorAll('.gantt-row').forEach(row => {
+		row.addEventListener('click', async (e) => {
+			// Don't trigger if clicking on the title link
+			if (e.target.classList.contains('gantt-title')) return;
+			if (!connectMode) return;
+			
+			const rowId = parseInt(row.dataset.id);
+			
+			if (!connectSource) {
+				// Start connection
+				connectSource = row;
+				row.classList.add('connect-source');
+				const title = row.querySelector('.gantt-title').textContent.trim();
+				connectStatus.textContent = `Selected "${title}". Now click the story it depends on...`;
+			} else if (connectSource !== row) {
+				// Complete connection
+				const fromId = parseInt(connectSource.dataset.id);
+				const toId = rowId;
+				
+				await addDependency(fromId, toId);
+				
+				// Reset
+				connectSource.classList.remove('connect-source');
+				connectSource = null;
+				connectStatus.textContent = 'Click a story row to start connection...';
+			}
+		});
+		
+		// Hover effect in connect mode
+		row.addEventListener('mouseenter', () => {
+			if (connectMode && connectSource && connectSource !== row) {
+				row.classList.add('connect-hover');
+			}
+		});
+		row.addEventListener('mouseleave', () => {
+			row.classList.remove('connect-hover');
+		});
+	});
+	
+	// Form-based dependency creation
+	addDepBtn.addEventListener('click', async () => {
+		const storyId = depStorySelect.value;
+		const dependsOnId = depDependsOnSelect.value;
+		
+		if (!storyId || !dependsOnId) {
+			showFormMessage('Please select both stories', 'error');
+			return;
+		}
+		
+		if (storyId === dependsOnId) {
+			showFormMessage('A story cannot depend on itself', 'error');
+			return;
+		}
+		
+		await addDependency(parseInt(storyId), parseInt(dependsOnId));
+	});
+	
+	function showFormMessage(msg, type) {
+		formMessage.textContent = msg;
+		formMessage.className = 'form-message ' + type;
+		setTimeout(() => {
+			formMessage.textContent = '';
+			formMessage.className = 'form-message';
+		}, 3000);
+	}
+	
+	// API calls
+	async function addDependency(fromId, toId) {
+		try {
+			const resp = await fetch('{% url "backlog:wbs_add_dependency" %}', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-CSRFToken': csrftoken,
+				},
+				body: JSON.stringify({ story_id: fromId, depends_on_id: toId }),
+			});
+			
+			const data = await resp.json();
+			
+			if (resp.ok && data.success) {
+				dependencies.push({ from_id: fromId, to_id: toId });
+				positionBars();
+				drawGanttDependencies();
+				showFormMessage('Dependency added successfully', 'success');
+			} else {
+				showFormMessage(data.error || 'Failed to add dependency', 'error');
+			}
+		} catch (err) {
+			showFormMessage('Error: ' + err.message, 'error');
+		}
+	}
+	
+	async function removeDependency(fromId, toId) {
+		try {
+			const resp = await fetch('{% url "backlog:wbs_remove_dependency" %}', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-CSRFToken': csrftoken,
+				},
+				body: JSON.stringify({ story_id: fromId, depends_on_id: toId }),
+			});
+			
+			const data = await resp.json();
+			
+			if (resp.ok && data.success) {
+				dependencies = dependencies.filter(d => !(d.from_id === fromId && d.to_id === toId));
+				positionBars();
+				drawGanttDependencies();
+				showFormMessage('Dependency removed', 'success');
+			} else {
+				showFormMessage(data.error || 'Failed to remove dependency', 'error');
+			}
+		} catch (err) {
+			showFormMessage('Error: ' + err.message, 'error');
+		}
+	}
+	
+	// Initialize
+	createArrowMarker();
+	createContextMenu();
+	positionBars();
+	
+	// Slight delay to ensure DOM is ready for measurements
+	setTimeout(() => {
+		drawGanttDependencies();
+	}, 100);
+	
+	// Redraw on window resize
+	window.addEventListener('resize', () => {
+		positionBars();
+		drawGanttDependencies();
+	});
+})();
+</script>
+{% endblock %}

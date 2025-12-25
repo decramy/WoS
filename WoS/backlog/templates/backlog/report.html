@@ -1,71 +1,271 @@
 {% extends 'backlog/base.html' %}
+{% load static %}
+
 {% block title %}Report — WoS{% endblock %}
+
 {% block content %}
-<h2>Stories report</h2>
+<div class="page-head">
+  <h2>📊 WSJF Score Report</h2>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'backlog:stories' %}">📋 Stories</a>
+    <a class="btn" href="{% url 'backlog:kanban' %}">📌 Kanban</a>
+  </div>
+</div>
 
-<p>Per-section averages (value and cost) and overall result (value / cost).</p>
+<div class="page-hint">
+  <strong>💡 How WSJF works:</strong> Stories are scored by <strong>Value</strong> (business benefit) and <strong>Cost</strong> (effort). 
+  The <strong>Result = Value ÷ Cost</strong> — higher is better! 🟢 Green rows have the best scores, 🔴 red rows the lowest.
+  Click any column header to sort.
+</div>
 
-<table class="report-table">
-	<thead>
-		<tr>
-			<th>Epic</th>
-			<th>Story</th>
-			{% for vs in value_sections %}
-				<th>V: {{ vs.name }}</th>
-			{% endfor %}
-			<th>Total Value</th>
-			{% for cs in cost_sections %}
-				<th>C: {{ cs.name }}</th>
-			{% endfor %}
-			<th>Total Cost</th>
-			<th>Result</th>
-		</tr>
-	</thead>
-	<tbody>
-		{% for r in rows %}
-			<tr class="result-{{ r.result_class }}">
-				<td>{{ r.story.epic.title }}</td>
-				<td>{{ r.story.title }}</td>
-				{% for avg in r.value_section_avgs %}
-					<td>
-						{% if avg is not None %}
-							{{ avg|floatformat:2 }}
-						{% else %}
-							—
-						{% endif %}
-					</td>
-				{% endfor %}
-				<td>{{ r.value_sum }}</td>
-				{% for avg in r.cost_section_avgs %}
-					<td>
-						{% if avg is not None %}
-							{{ avg|floatformat:2 }}
-						{% else %}
-							—
-						{% endif %}
-					</td>
-				{% endfor %}
-				<td>{{ r.cost_sum }}</td>
-				<td>
-					{% if r.result is None %}
-						—
-					{% else %}
-						{{ r.result|floatformat:2 }}
-					{% endif %}
-				</td>
-			</tr>
-		{% empty %}
-			<tr><td colspan="{{ total_cols }}">No stories found.</td></tr>
-		{% endfor %}
-	</tbody>
+<form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  <label for="epic-select">📁 Epic:</label>
+  <select id="epic-select" name="epic" onchange="this.form.submit()">
+    <option value="">All Epics</option>
+    {% for e in all_epics %}
+      <option value="{{ e.id }}" {% if e.id|stringformat:"s" == epic_id|stringformat:"s" %}selected{% endif %}>{{ e.title }}</option>
+    {% endfor %}
+  </select>
+  <label for="status-select">🏷️ Status:</label>
+  <select id="status-select" name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    <option value="idea" {% if status_filter == 'idea' %}selected{% endif %}>IDEA</option>
+    <option value="ready" {% if status_filter == 'ready' %}selected{% endif %}>READY</option>
+    <option value="planned" {% if status_filter == 'planned' %}selected{% endif %}>PLANNED</option>
+    <option value="started" {% if status_filter == 'started' %}selected{% endif %}>STARTED</option>
+    <option value="blocked" {% if status_filter == 'blocked' %}selected{% endif %}>BLOCKED</option>
+    <option value="done" {% if status_filter == 'done' %}selected{% endif %}>DONE</option>
+  </select>
+</form>
+
+<table class="overview-table" id="report-table" style="margin-top:12px;">
+  <thead>
+    <tr>
+      <th class="sortable">
+        📁 Epic <span class="sort-icon"></span>
+      </th>
+      <th class="sortable">
+        📋 Story <span class="sort-icon"></span>
+      </th>
+      <th class="sortable">
+        🏷️ Status <span class="sort-icon"></span>
+      </th>
+      {% for vs in value_sections %}
+        <th class="sortable" title="Value: {{ vs.name }}">
+          V: {{ vs.name|truncatechars:12 }} <span class="sort-icon"></span>
+        </th>
+      {% endfor %}
+      <th class="sortable" title="Total Value Score">
+        💎 Value <span class="sort-icon"></span>
+      </th>
+      {% for cs in cost_sections %}
+        <th class="sortable" title="Cost: {{ cs.name }}">
+          C: {{ cs.name|truncatechars:12 }} <span class="sort-icon"></span>
+        </th>
+      {% endfor %}
+      <th class="sortable" title="Total Cost Score">
+        ⚡ Cost <span class="sort-icon"></span>
+      </th>
+      <th class="sortable" title="WSJF Result (Value ÷ Cost)">
+        🎯 Result <span class="sort-icon"></span>
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+      <tr data-result="{% if r.result is not None %}{{ r.result }}{% endif %}">
+        <td>
+          <a href="{% url 'backlog:edit_epic' r.story.epic.id %}" class="table-link">{{ r.story.epic.title|truncatechars:20 }}</a>
+        </td>
+        <td>
+          <a href="{% url 'backlog:refine_story' r.story.id %}" class="table-link">{{ r.story.title|truncatechars:30 }}</a>
+        </td>
+        <td class="status-{{ r.story.computed_status }}" data-value="{{ r.story.computed_status }}">
+          {{ r.story.computed_status|upper }}
+        </td>
+        {% for avg in r.value_section_avgs %}
+          <td data-value="{% if avg is not None %}{{ avg }}{% else %}-999{% endif %}" style="text-align:center;">
+            {% if avg is not None %}
+              {{ avg|floatformat:1 }}
+            {% else %}
+              <span style="color:var(--muted);">—</span>
+            {% endif %}
+          </td>
+        {% endfor %}
+        <td data-value="{{ r.value_sum }}" style="text-align:center;font-weight:600;">
+          {{ r.value_sum }}
+        </td>
+        {% for avg in r.cost_section_avgs %}
+          <td data-value="{% if avg is not None %}{{ avg }}{% else %}-999{% endif %}" style="text-align:center;">
+            {% if avg is not None %}
+              {{ avg|floatformat:1 }}
+            {% else %}
+              <span style="color:var(--muted);">—</span>
+            {% endif %}
+          </td>
+        {% endfor %}
+        <td data-value="{{ r.cost_sum }}" style="text-align:center;font-weight:600;">
+          {{ r.cost_sum }}
+        </td>
+        <td class="result-cell" data-value="{% if r.result is not None %}{{ r.result }}{% else %}-999{% endif %}" style="text-align:center;">
+          {% if r.result is None %}
+            <span style="color:var(--muted);">—</span>
+          {% else %}
+            <strong>{{ r.result|floatformat:2 }}</strong>
+          {% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr>
+        <td colspan="{{ total_cols }}">
+          <div class="empty-state">
+            <div class="empty-icon">📊</div>
+            <div class="empty-text">No stories found</div>
+            <div class="empty-hint">Create some stories and score them to see results here.</div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
 </table>
 
 <style>
-	.report-table { border-collapse: collapse; width: 100%; }
-	.report-table th, .report-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-	.report-table tr.result-good { background: #e6ffed; }
-	.report-table tr.result-bad { background: #fff2f0; }
-	.report-table tr.result-neutral { background: #f6f6f6; }
+  /* Sortable header styling */
+  .overview-table th.sortable { 
+    cursor: pointer; 
+    user-select: none; 
+    transition: background 0.15s; 
+    white-space: nowrap;
+  }
+  .overview-table th.sortable:hover { background: var(--surface); }
+  .overview-table th .sort-icon { font-size: 10px; margin-left: 4px; opacity: 0.4; }
+  .overview-table th.sort-asc .sort-icon::after { content: '▲'; opacity: 1; }
+  .overview-table th.sort-desc .sort-icon::after { content: '▼'; opacity: 1; }
+  
+  /* Result cell emphasis */
+  .result-cell { font-weight: 600; }
+  
+  /* Row gradient colors will be applied via JS */
+  #report-table tbody tr {
+    transition: background 0.2s;
+  }
 </style>
+
+<script>
+(function() {
+  var table = document.getElementById('report-table');
+  var tbody = table.querySelector('tbody');
+  var headers = table.querySelectorAll('th.sortable');
+  var currentSort = { col: -1, asc: true };
+  
+  // Sorting functionality
+  headers.forEach(function(header, index) {
+    header.addEventListener('click', function() {
+      var col = index;
+      var asc = currentSort.col === col ? !currentSort.asc : true;
+      
+      // Update sort state
+      currentSort = { col: col, asc: asc };
+      
+      // Update header classes
+      headers.forEach(function(h) {
+        h.classList.remove('sort-asc', 'sort-desc');
+      });
+      this.classList.add(asc ? 'sort-asc' : 'sort-desc');
+      
+      // Sort rows
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort(function(a, b) {
+        var aCell = a.cells[col];
+        var bCell = b.cells[col];
+        
+        if (!aCell || !bCell) return 0;
+        
+        // Get sort value - use data-value if available, otherwise text content
+        var aVal = aCell.hasAttribute('data-value') ? aCell.getAttribute('data-value') : aCell.textContent.trim();
+        var bVal = bCell.hasAttribute('data-value') ? bCell.getAttribute('data-value') : bCell.textContent.trim();
+        
+        // Try numeric comparison
+        var aNum = parseFloat(aVal);
+        var bNum = parseFloat(bVal);
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return asc ? aNum - bNum : bNum - aNum;
+        }
+        
+        // String comparison
+        return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      });
+      
+      // Re-append sorted rows
+      rows.forEach(function(row) {
+        tbody.appendChild(row);
+      });
+      
+      // Re-apply gradient colors
+      applyGradientColors();
+    });
+  });
+  
+  // Gradient color function: Green (high) → Yellow (mid) → Red (low)
+  function applyGradientColors() {
+    var rows = document.querySelectorAll('#report-table tbody tr[data-result]');
+    var results = [];
+    
+    rows.forEach(function(row) {
+      var val = row.getAttribute('data-result');
+      if (val && val !== '') {
+        results.push(parseFloat(val));
+      }
+    });
+    
+    if (results.length === 0) return;
+    
+    var minResult = Math.min.apply(null, results);
+    var maxResult = Math.max.apply(null, results);
+    var range = maxResult - minResult;
+    
+    rows.forEach(function(row) {
+      var val = row.getAttribute('data-result');
+      if (!val || val === '') {
+        row.style.background = 'var(--surface)';
+        return;
+      }
+      
+      var result = parseFloat(val);
+      // ratio: 0 = lowest (red), 1 = highest (green)
+      var ratio = range > 0 ? (result - minResult) / range : 0.5;
+      
+      var r, g, b;
+      if (ratio < 0.5) {
+        // Red to Yellow (low to mid)
+        var t = ratio * 2;
+        r = 255;
+        g = Math.round(200 * t);
+        b = Math.round(80 * (1 - t));
+      } else {
+        // Yellow to Green (mid to high)
+        var t = (ratio - 0.5) * 2;
+        r = Math.round(255 * (1 - t));
+        g = Math.round(200 + 55 * t);
+        b = Math.round(80 * t);
+      }
+      
+      row.style.background = 'rgba(' + r + ',' + g + ',' + b + ', 0.18)';
+    });
+  }
+  
+  // Initial gradient application
+  applyGradientColors();
+  
+  // Default sort: Result column (last column), descending
+  var lastHeader = headers[headers.length - 1];
+  if (lastHeader) {
+    // Click twice: first for ascending, second for descending
+    lastHeader.click(); // asc
+    lastHeader.click(); // desc
+  }
+})();
+</script>
 
 {% endblock %}

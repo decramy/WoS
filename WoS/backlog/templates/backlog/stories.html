@@ -5,58 +5,129 @@
 
 {% block content %}
 <div class="page-head">
-  <h2>Stories</h2>
+  <h2>📋 {% if show_archived %}Archived {% endif %}Stories</h2>
   <div class="page-actions">
-    <a class="btn" href="{% url 'backlog:create_story_refine' %}">+ Create Story</a>
+    {% if show_archived %}
+      <a class="btn" href="{% url 'backlog:stories' %}">← Active Stories</a>
+    {% else %}
+      <a class="btn" href="{% url 'backlog:stories' %}?archived=1">📦 View Archived</a>
+      <a class="btn" href="{% url 'backlog:create_story_refine' %}">➕ Create Story</a>
+    {% endif %}
   </div>
 </div>
 
-<form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-  <input name="q" placeholder="Search stories" value="{{ q }}">
-  <label>Sort
-    <select name="sort">
-      <option value="epic" {% if sort == 'epic' %}selected{% endif %}>Epic</option>
-      <option value="title" {% if sort == 'title' %}selected{% endif %}>Title</option>
-      <option value="created" {% if sort == 'created' %}selected{% endif %}>Created</option>
-      <option value="status" {% if sort == 'status' %}selected{% endif %}>Status</option>
-    </select>
-  </label>
-  <label>
-    <select name="order">
-      <option value="asc" {% if order == 'asc' %}selected{% endif %}>Asc</option>
-      <option value="desc" {% if order == 'desc' %}selected{% endif %}>Desc</option>
-    </select>
-  </label>
-  {% if epic_id %}
-    <a class="btn" href="{% url 'backlog:stories' %}">Clear epic filter</a>
+<div class="page-hint">
+  {% if show_archived %}
+  <strong>📦 Archived Stories:</strong> These stories have been archived and are hidden from the main view.
+  You can unarchive them to bring them back.
+  {% else %}
+  <strong>💡 Tip:</strong> Stories are individual units of work. The <strong>📝</strong> column shows if details (title, goal, workitems) are complete, 
+  <strong>📊</strong> shows if all WSJF scoring factors are defined, and <strong>🚩</strong> indicates stories needing review.
   {% endif %}
-  <button class="btn" type="submit">Apply</button>
+</div>
+
+<form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  {% if show_archived %}<input type="hidden" name="archived" value="1">{% endif %}
+  <label for="epic-select">📁 Epic:</label>
+  <select id="epic-select" name="epic" onchange="this.form.submit()">
+    <option value="">All Epics</option>
+    {% for e in all_epics %}
+      <option value="{{ e.id }}" {% if e.id|stringformat:"s" == epic_id|stringformat:"s" %}selected{% endif %}>{{ e.title }}</option>
+    {% endfor %}
+  </select>
+  <label for="status-select">🏷️ Status:</label>
+  <select id="status-select" name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    {% for st in all_statuses %}
+      <option value="{{ st }}" {% if st == status_filter %}selected{% endif %}>{{ st|upper }}</option>
+    {% endfor %}
+  </select>
+  <label for="review-select">🚩 Review:</label>
+  <select id="review-select" name="review" onchange="this.form.submit()">
+    <option value="">All</option>
+    <option value="yes" {% if review_filter == 'yes' %}selected{% endif %}>Required</option>
+    <option value="no" {% if review_filter == 'no' %}selected{% endif %}>Not Required</option>
+  </select>
+  <input name="q" placeholder="🔍 Search stories..." value="{{ q }}">
+  <button class="btn" type="submit">Filter</button>
 </form>
 <table class="overview-table" style="margin-top:12px;">
   <thead>
     <tr>
       <th>Actions</th>
-      <th>Epic</th>
-      <th>Story</th>
+      <th>
+        <a href="?{% if q %}q={{ q }}&{% endif %}{% if epic_id %}epic={{ epic_id }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=epic&order={% if sort == 'epic' and order == 'asc' %}desc{% else %}asc{% endif %}">
+          📁 Epic
+          {% if sort == 'epic' %}{% if order == 'asc' %} ▲ {% else %} ▼ {% endif %}{% endif %}
+        </a>
+      </th>
+      <th>
+        <a href="?{% if q %}q={{ q }}&{% endif %}{% if epic_id %}epic={{ epic_id }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=title&order={% if sort == 'title' and order == 'asc' %}desc{% else %}asc{% endif %}">
+          Story
+          {% if sort == 'title' %}{% if order == 'asc' %} ▲ {% else %} ▼ {% endif %}{% endif %}
+        </a>
+      </th>
+      <th>
+        <a href="?{% if q %}q={{ q }}&{% endif %}{% if epic_id %}epic={{ epic_id }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=status&order={% if sort == 'status' and order == 'asc' %}desc{% else %}asc{% endif %}">
+          🏷️ Status
+          {% if sort == 'status' %}{% if order == 'asc' %} ▲ {% else %} ▼ {% endif %}{% endif %}
+        </a>
+      </th>
+      <th title="Story details complete (title, goal, workitems)">📝</th>
+      <th title="All WSJF score factors defined">📊</th>
+      <th title="Review required">🚩</th>
     </tr>
   </thead>
   <tbody>
-    {% for s in stories %}
+    {% for item in stories %}
       <tr>
         <td style="white-space:nowrap;">
-          <a href="{% url 'backlog:refine_story' s.id %}" title="Refine">🔧</a>
-          <form method="post" action="{% url 'backlog:overview' %}" style="display:inline;">
+          <a href="{% url 'backlog:refine_story' item.story.id %}" title="Refine story">🔧</a>
+          {% if show_archived %}
+            <form method="post" action="" style="display:inline;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="unarchive_story">
+              <input type="hidden" name="story_id" value="{{ item.story.id }}">
+              <button type="submit" title="Unarchive story" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">📤</button>
+            </form>
+          {% else %}
+            <form method="post" action="" style="display:inline;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="archive_story">
+              <input type="hidden" name="story_id" value="{{ item.story.id }}">
+              <button type="submit" title="Archive story" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">📦</button>
+            </form>
+            <form method="post" action="" style="display:inline;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="toggle_review">
+              <input type="hidden" name="story_id" value="{{ item.story.id }}">
+              <button type="submit" title="{% if item.story.review_required %}Clear review flag{% else %}Flag for review{% endif %}" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">{% if item.story.review_required %}✅{% else %}🚩{% endif %}</button>
+            </form>
+          {% endif %}
+          <form method="post" action="{% url 'backlog:stories' %}" style="display:inline;">
             {% csrf_token %}
             <input type="hidden" name="action" value="delete_story">
-            <input type="hidden" name="story_id" value="{{ s.id }}">
-            <button type="submit" title="Delete" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">🗑️</button>
+            <input type="hidden" name="story_id" value="{{ item.story.id }}">
+            <button type="submit" title="Delete story" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">🗑️</button>
           </form>
         </td>
-        <td>{{ s.epic.title }}</td>
-        <td>{{ s.title }}</td>
+        <td style="color:var(--muted);">{{ item.story.epic.title }}</td>
+        <td><a href="{% url 'backlog:refine_story' item.story.id %}" class="table-link">{% if item.story.review_required %}🚩 {% endif %}{{ item.story.title }}</a></td>
+        <td><strong class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|upper }}</strong></td>
+        <td style="text-align:center;">{% if item.details_complete %}<span style="color:var(--accent-2);" title="✓ Details complete">✅</span>{% else %}<span style="color:var(--danger);" title="✗ Missing: title, goal or workitems">⚠️</span>{% endif %}</td>
+        <td style="text-align:center;">{% if item.scores_complete %}<span style="color:var(--accent-2);" title="✓ All scores defined">✅</span>{% else %}<span style="color:var(--danger);" title="✗ Some scores undefined">⚠️</span>{% endif %}</td>
+        <td style="text-align:center;">{% if item.story.review_required %}<span style="color:var(--warning);" title="Review required">🚩</span>{% else %}—{% endif %}</td>
       </tr>
     {% empty %}
-      <tr><td colspan="3">No stories found.</td></tr>
+      <tr>
+        <td colspan="7">
+          <div class="empty-state">
+            <div class="empty-icon">{% if show_archived %}📦{% else %}📋{% endif %}</div>
+            <div class="empty-text">No {% if show_archived %}archived {% endif %}stories found</div>
+            <div class="empty-hint">{% if show_archived %}No stories have been archived.{% else %}Create a story or adjust your filters{% endif %}</div>
+          </div>
+        </td>
+      </tr>
     {% endfor %}
   </tbody>
 </table>

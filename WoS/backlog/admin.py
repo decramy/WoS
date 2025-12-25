@@ -11,12 +11,24 @@ from .models import (
 	CostFactor,
 	CostFactorAnswer,
 	StoryCostFactorScore,
+	StoryDependency,
+	StoryHistory,
 )
 
 
 admin.site.register(Epic)
 admin.site.register(ValueFactorSection)
 admin.site.register(CostFactorSection)
+admin.site.register(StoryDependency)
+
+
+@admin.register(StoryHistory)
+class StoryHistoryAdmin(admin.ModelAdmin):
+	list_display = ("story", "field_name", "old_value", "new_value", "changed_at")
+	list_filter = ("field_name", "changed_at")
+	search_fields = ("story__title", "field_name", "old_value", "new_value")
+	readonly_fields = ("story", "field_name", "old_value", "new_value", "changed_at")
+	ordering = ("-changed_at",)
 
 
 class ValueFactorAnswerInline(admin.TabularInline):
@@ -59,7 +71,7 @@ class CostFactorAdmin(admin.ModelAdmin):
 class StoryAdmin(admin.ModelAdmin):
 	# We build a dynamic ModelForm in `get_form` so the admin accepts
 	# generated field names (vf_<id>) when validating fieldsets.
-	list_display = ("title", "epic", "target")
+	list_display = ("title", "epic", "goal")
 	list_filter = ("epic",)
 
 	def get_form(self, request, obj=None, **kwargs):

@@ -13,22 +13,33 @@
     <header>
         <div class="container header-row">
             <div class="brand">
-                <h1>WoS</h1>
-                <div class="tag">WSJF on Steroids</div>
+                <h1>🚀 WoS</h1>
+                <div class="tag">WSJF on Steroids — Prioritize Smarter</div>
             </div>
             <nav class="main-nav">
-                <a class="btn" href="{% url 'admin:index' %}">Admin</a>
-                <a class="btn" href="{% url 'backlog:overview' %}">Epics</a>
-                <a class="btn" href="{% url 'backlog:stories' %}">Stories</a>
-                <a class="btn" href="{% url 'backlog:report' %}">Report</a>
-                <a class="btn" href="{% url 'backlog:kanban' %}">Kanban</a>
+                <a class="btn" href="{% url 'admin:index' %}" title="Django Admin">⚙️ Admin</a>
+                <a class="btn" href="{% url 'backlog:index' %}" title="Manage your epics">📁 Epics</a>
+                <a class="btn" href="{% url 'backlog:stories' %}" title="View all stories">📋 Stories</a>
+                <a class="btn" href="{% url 'backlog:report' %}" title="WSJF Score Report">📊 Report</a>
+                <a class="btn" href="{% url 'backlog:kanban' %}" title="Kanban Board">📌 Kanban</a>
+                <a class="btn" href="{% url 'backlog:wbs' %}" title="Work Breakdown & Dependencies">🔗 WBS</a>
             </nav>
             <div class="header-actions">
-                <button id="theme-toggle" title="Toggle theme" class="icon-btn">🌙</button>
+                <button id="theme-toggle" title="Toggle dark/light theme" class="icon-btn">🌙</button>
             </div>
         </div>
     </header>
     <main>
+        {% if messages %}
+        <div class="messages-container">
+            {% for message in messages %}
+            <div class="message message-{{ message.tags }}" onclick="this.remove();">
+                {{ message }}
+                <span class="message-close">×</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
         {% block content %}
         {% endblock %}
     </main>

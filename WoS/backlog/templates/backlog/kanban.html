@@ -1,6 +1,185 @@
 {% extends 'backlog/base.html' %}
+{% load static %}
 {% block title %}Kanban — WoS{% endblock %}
 {% block content %}
-<h2>Kanban board</h2>
-<p>Placeholder kanban board. We'll implement draggable columns and cards later.</p>
+<div class="page-head">
+	<h2>📋 Kanban Board</h2>
+	<div class="page-actions">
+		<a class="btn" href="{% url 'backlog:create_story_refine' %}">+ Create Story</a>
+	</div>
+</div>
+
+<div class="page-hint">
+	<strong>💡 How to use:</strong> Drag and drop cards between columns to update status.
+	<strong>Backlog</strong> → <strong>Planned</strong> → <strong>Doing</strong> → <strong>Review</strong> → <strong>Done</strong>.
+	Higher score items (green) should generally be tackled first!
+</div>
+
+<form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+	<label for="epic-select">📁 Epic:</label>
+	<select id="epic-select" name="epic" onchange="this.form.submit()">
+		<option value="">All Epics</option>
+		{% for e in all_epics %}
+			<option value="{{ e.id }}" {% if e.id|stringformat:"s" == epic_id|stringformat:"s" %}selected{% endif %}>{{ e.title }}</option>
+		{% endfor %}
+	</select>
+	<label for="sort-select">Sort:</label>
+	<select id="sort-select" name="sort" onchange="this.form.submit()">
+		<option value="result" {% if sort == 'result' %}selected{% endif %}>Score Result</option>
+		<option value="status" {% if sort == 'status' %}selected{% endif %}>Status</option>
+		<option value="started" {% if sort == 'started' %}selected{% endif %}>Started</option>
+		<option value="finished" {% if sort == 'finished' %}selected{% endif %}>Finished</option>
+		<option value="blocked" {% if sort == 'blocked' %}selected{% endif %}>Blocked</option>
+	</select>
+	<select name="order" onchange="this.form.submit()">
+		<option value="desc" {% if order == 'desc' %}selected{% endif %}>Desc</option>
+		<option value="asc" {% if order == 'asc' %}selected{% endif %}>Asc</option>
+	</select>
+	<button class="btn" type="submit">Filter</button>
+</form>
+
+<!-- Ensure CSRF cookie is set for fetch requests -->
+<form style="display:none">{% csrf_token %}</form>
+
+<style>
+	.kanban-board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+	.kanban-col{background:var(--panel);border:1px solid var(--border);border-radius:8px;display:flex;flex-direction:column;min-height:280px}
+	.kanban-col h3{margin:8px 8px 4px 8px;font-size:14px;color:var(--text-secondary)}
+	.kanban-drop{flex:1;padding:8px;display:flex;flex-direction:column;gap:8px}
+	.kanban-drop.drag-over{outline:2px dashed var(--accent);outline-offset:4px}
+	.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px;cursor:grab}
+	.kanban-card .title{font-weight:600;margin-bottom:4px}
+	.kanban-card .meta{font-size:12px;color:var(--text-secondary)}
+	.kanban-card .score{font-size:13px;font-weight:700;color:var(--accent);margin-top:4px}
+	.kanban-card .score.high{color:var(--accent-2)}
+	.kanban-card .score.low{color:var(--danger)}
+	@media (max-width: 1100px){.kanban-board{grid-template-columns:repeat(2,1fr)}}
+	@media (max-width: 700px){.kanban-board{grid-template-columns:1fr}}
+</style>
+
+<div class="kanban-board" id="kanban">
+	<div class="kanban-col" data-col="backlog">
+		<h3>Backlog (Ready) ({{ columns.backlog|length }})</h3>
+		<div class="kanban-drop" data-target="backlog">
+			{% for card in columns.backlog %}
+				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
+					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="meta">{{ card.story.epic.title }}</div>
+					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
+				</div>
+			{% endfor %}
+		</div>
+	</div>
+	<div class="kanban-col" data-col="planned">
+		<h3>Planned ({{ columns.planned|length }})</h3>
+		<div class="kanban-drop" data-target="planned">
+			{% for card in columns.planned %}
+				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
+					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="meta">{{ card.story.epic.title }}</div>
+					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
+				</div>
+			{% endfor %}
+		</div>
+	</div>
+	<div class="kanban-col" data-col="doing">
+		<h3>Doing ({{ columns.doing|length }})</h3>
+		<div class="kanban-drop" data-target="doing">
+			{% for card in columns.doing %}
+				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
+					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="meta">{{ card.story.epic.title }}</div>
+					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
+				</div>
+			{% endfor %}
+		</div>
+	</div>
+	<div class="kanban-col" data-col="blocked">
+		<h3>Blocked ({{ columns.blocked|length }})</h3>
+		<div class="kanban-drop" data-target="blocked">
+			{% for card in columns.blocked %}
+				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
+					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="meta">{{ card.story.epic.title }}</div>
+					<div class="meta" style="color:var(--danger)">{{ card.story.blocked|truncatechars:50 }}</div>
+					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
+				</div>
+			{% endfor %}
+		</div>
+	</div>
+	<div class="kanban-col" data-col="done">
+		<h3>Done ({{ columns.done|length }})</h3>
+		<div class="kanban-drop" data-target="done">
+			{% for card in columns.done %}
+				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
+					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="meta">{{ card.story.epic.title }}</div>
+					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
+				</div>
+			{% endfor %}
+		</div>
+	</div>
+</div>
+
+<script>
+	(function(){
+		function getCookie(name) {
+			const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+			return v ? v.pop() : '';
+		}
+		const csrftoken = getCookie('csrftoken');
+
+		const drops = document.querySelectorAll('.kanban-drop');
+		let dragId = null;
+
+		document.querySelectorAll('.kanban-card').forEach(card => {
+			card.addEventListener('dragstart', ev => {
+				dragId = card.getAttribute('data-id');
+				ev.dataTransfer.setData('text/plain', dragId);
+				ev.dataTransfer.effectAllowed = 'move';
+			});
+		});
+
+		drops.forEach(drop => {
+			drop.addEventListener('dragover', ev => {
+				ev.preventDefault();
+				drop.classList.add('drag-over');
+			});
+			drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+			drop.addEventListener('drop', async ev => {
+				ev.preventDefault();
+				drop.classList.remove('drag-over');
+				const target = drop.getAttribute('data-target');
+				const id = dragId || ev.dataTransfer.getData('text/plain');
+				if (!id) return;
+
+				let blocked_reason = '';
+				if (target === 'blocked') {
+					blocked_reason = window.prompt('Why is this story blocked?') || '';
+				}
+
+				try {
+					const resp = await fetch('{% url "backlog:kanban_move" %}', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							'X-CSRFToken': csrftoken,
+						},
+						body: JSON.stringify({ story_id: id, target, blocked_reason })
+					});
+					const data = await resp.json();
+					if (!resp.ok || !data.ok) {
+						alert('Move failed: ' + (data.error || resp.status));
+						return;
+					}
+					// Reload to update counts and sorting
+					window.location.reload();
+				} catch (e) {
+					console.error(e);
+					alert('Move failed');
+				}
+			});
+		});
+	})();
+</script>
 {% endblock %}

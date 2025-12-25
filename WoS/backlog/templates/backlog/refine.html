@@ -3,41 +3,581 @@
 {% block title %}Refine Story — {{ story.title }}{% endblock %}
 
 {% block content %}
-  <h2>Refine: {{ story.title }}</h2>
-  <form method="post" action="">
-    {% csrf_token %}
-      <input type="hidden" name="story_id" value="{{ story.id }}">
-      <input type="hidden" name="action" value="edit_story">
-      <div>
-        <label>Title</label>
-        <input type="text" name="title" value="{{ story.title }}" style="width:100%;">
+<style>
+  /* Page-specific styles for refine.html */
+  .refine-header { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .refine-header h2 { margin: 0; font-size: 20px; }
+  
+  /* Story title uses common title-display/title-input but with story-specific alias */
+  .story-title-display {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 2px dashed transparent;
+    transition: border-color 0.15s;
+  }
+  .story-title-display:hover {
+    border-color: var(--border);
+    background: var(--panel);
+  }
+  .story-title-input {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 2px solid var(--accent);
+    background: var(--panel);
+    width: 100%;
+    box-sizing: border-box;
+    display: none;
+  }
+  .story-title-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+  }
+  .story-title-input.active { display: block; }
+  .story-title-display.hidden { display: none; }
+  
+  .story-identity { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media(max-width:600px) { .story-identity { grid-template-columns: 1fr; } }
+  
+  .status-bar { 
+    display: flex; 
+    gap: 12px; 
+    flex-wrap: wrap; 
+    padding: 12px 16px; 
+    background: var(--panel); 
+    border: 1px solid var(--border); 
+    border-radius: 10px; 
+    margin-bottom: 20px;
+    align-items: center;
+  }
+  .status-item { display: flex; flex-direction: column; gap: 2px; min-width: 100px; }
+  .status-item .label { font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .status-item .value { font-size: 14px; font-weight: 600; }
+  
+  .blocked-display { 
+    cursor: pointer; 
+    padding: 4px 8px; 
+    border-radius: 6px; 
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    min-width: 150px;
+  }
+  .blocked-display:hover { background: var(--surface); border-color: var(--danger); }
+  .blocked-display.has-text { 
+    background: rgba(225,29,72,0.08); 
+    border: 1px solid var(--danger); 
+    color: var(--danger);
+    font-weight: 500;
+  }
+  .blocked-input-wrapper { display: none; flex: 1; min-width: 200px; }
+  .blocked-input-wrapper.active { display: flex; gap: 8px; align-items: center; }
+  .blocked-input-wrapper input { 
+    flex: 1; 
+    padding: 6px 10px; 
+    border-radius: 6px; 
+    border: 1px solid var(--danger);
+    font-size: 13px;
+  }
+  .blocked-input-wrapper button { padding: 6px 12px; font-size: 12px; }
+  
+  .scoring-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }
+  @media(max-width:1400px) { .scoring-grid { grid-template-columns: 1fr 1fr 1fr; } }
+  @media(max-width:1000px) { .scoring-grid { grid-template-columns: 1fr 1fr; } }
+  @media(max-width:700px) { .scoring-grid { grid-template-columns: 1fr; } }
+  
+  .scoring-column h3 { margin: 0 0 12px 0; font-size: 15px; }
+  
+  /* Undefined factor row has light red background */
+  .factor-row.undefined {
+    background: rgba(225,29,72,0.08);
+    border-radius: 8px;
+    padding: 8px;
+    margin: 6px -8px;
+  }
+</style>
+
+<div class="page-hint">
+  <strong>✏️ Refine your story:</strong> Add details, set scores for WSJF prioritization, and manage dependencies.
+  Factors with ⚠️ red background are undefined — score them to get accurate prioritization.
+</div>
+
+<form method="post" action="" class="page-content-with-fixed-bar" id="refine-form">
+  {% csrf_token %}
+  <input type="hidden" name="story_id" value="{{ story.id }}">
+  <input type="hidden" name="action" value="edit_story">
+
+  <!-- Big clickable title -->
+  <h1 id="title-display" class="story-title-display" onclick="showTitleInput()">
+    {% if story.title %}{{ story.title }}{% else %}Click to add title...{% endif %}
+  </h1>
+  <input type="text" id="title-input" class="story-title-input" name="title" value="{{ story.title }}" placeholder="Story title..." onblur="hideTitleInput()">
+
+  <!-- Epic selector in a box -->
+  <div class="content-section">
+    <h3>📁 Epic</h3>
+    <p class="section-hint">Which epic does this story belong to?</p>
+    <select id="story_epic" name="epic_id" style="width:100%;max-width:400px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:14px;">
+      <option value="">Choose epic...</option>
+      {% if epics %}
+        {% for e in epics %}
+          <option value="{{ e.id }}" {% if story.epic and e.id == story.epic.id %}selected{% endif %}>{{ e.title }}</option>
+        {% endfor %}
+      {% else %}
+        <option disabled>No epics available</option>
+      {% endif %}
+    </select>
+  </div>
+
+  {% if story.id %}
+  <!-- Status Bar: computed status + dates + blocked + review -->
+  <div class="status-bar">
+    <div class="status-item">
+      <span class="label">Status</span>
+      <span class="value status-{{ story.computed_status }}">{{ story.computed_status|upper }}</span>
+    </div>
+    <div class="status-item">
+      <span class="label">Planned</span>
+      <span class="value">{% if story.planned %}{{ story.planned|date:'Y-m-d' }}{% else %}—{% endif %}</span>
+    </div>
+    <div class="status-item">
+      <span class="label">Started</span>
+      <span class="value">{% if story.started %}{{ story.started|date:'Y-m-d' }}{% else %}—{% endif %}</span>
+    </div>
+    <div class="status-item">
+      <span class="label">Finished</span>
+      <span class="value">{% if story.finished %}{{ story.finished|date:'Y-m-d' }}{% else %}—{% endif %}</span>
+    </div>
+    <div class="status-item">
+      <span class="label">Review</span>
+      <button type="button" onclick="document.getElementById('toggle-review-form').submit();" style="background:none;border:0;padding:0;margin:0;cursor:pointer;font-size:14px;" title="{% if story.review_required %}Clear review flag{% else %}Flag for review{% endif %}">
+        {% if story.review_required %}<span style="color:var(--warning);">🚩 Required</span>{% else %}<span style="color:var(--muted);">—</span>{% endif %}
+      </button>
+    </div>
+    <div class="status-item" style="flex:1;min-width:180px;">
+      <span class="label">Blocked</span>
+      <div id="blocked-container">
+        <span id="blocked-display" class="blocked-display {% if story.blocked %}has-text{% endif %}" onclick="showBlockedInput()">
+          {% if story.blocked %}{{ story.blocked|truncatechars:40 }}{% else %}Click to add blocker...{% endif %}
+        </span>
+        <div id="blocked-input-wrapper" class="blocked-input-wrapper">
+          <input type="text" id="blocked-input" name="blocked" value="{{ story.blocked }}" placeholder="Why is this blocked?">
+          <button type="button" onclick="clearBlocked()">Clear</button>
+        </div>
       </div>
-      <div>
-        <label>Epic</label>
-        <select name="epic_id" style="width:100%">
-          <option value="">Choose epic</option>
-          {% if epics %}
-            {% for e in epics %}
-              <option value="{{ e.id }}" {% if story.epic and e.id == story.epic.id %}selected{% endif %}>{{ e.title }}</option>
+    </div>
+  </div>
+  {% else %}
+  <input type="hidden" name="blocked" value="">
+  {% endif %}
+
+  <!-- Content: Goal and Work Items together -->
+  <div class="content-section">
+    <h3>📝 Story Details</h3>
+    <p class="section-hint">Describe what this story aims to achieve and the work involved.</p>
+    <div class="text-fields">
+      <div class="form-group">
+        <label for="story_goal" class="field-title">🎯 Goal</label>
+        <textarea id="story_goal" name="goal" rows="2" placeholder="What outcome do we want to achieve?">{{ story.goal }}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="story_workitems" class="field-title">📋 Work Items</label>
+        <textarea id="story_workitems" name="workitems" rows="5" placeholder="List the tasks or acceptance criteria...">{{ story.workitems }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  {% if story.id %}
+  <!-- Dependencies section -->
+  <div class="content-section">
+    <h3>🔗 Dependencies</h3>
+    <p class="section-hint">This story depends on:</p>
+    
+    <!-- Current dependencies -->
+    <div class="dependencies-list" style="margin-bottom:16px;">
+      {% if dependencies %}
+        {% for dep in dependencies %}
+          <div class="dependency-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
+            <span style="flex:1;">
+              <strong>{{ dep.depends_on.title }}</strong>
+              <span style="color:var(--muted);font-size:12px;margin-left:8px;">{{ dep.depends_on.epic.title }}</span>
+              <span class="status-{{ dep.depends_on.computed_status }}" style="font-size:11px;margin-left:8px;text-transform:uppercase;">{{ dep.depends_on.computed_status }}</span>
+            </span>
+            <button type="submit" form="remove-dep-{{ dep.id }}" style="padding:4px 8px;font-size:12px;background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:4px;cursor:pointer;">Remove</button>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p style="color:var(--muted);font-size:13px;padding:12px;background:var(--surface);border-radius:6px;text-align:center;">🔗 No dependencies yet — this story can start anytime!</p>
+      {% endif %}
+    </div>
+    
+    <!-- Add dependency picker -->
+    <div class="add-dependency">
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+        <div style="flex:1;min-width:250px;">
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">Add dependency:</label>
+          <select id="dependency-select" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel);font-size:13px;">
+            <option value="">Select a story...</option>
+            {% if same_epic_stories %}
+              <optgroup label="Same Epic ({{ story.epic.title }})">
+                {% for s in same_epic_stories %}
+                  <option value="{{ s.id }}">{{ s.title }} ({{ s.computed_status }})</option>
+                {% endfor %}
+              </optgroup>
+            {% endif %}
+            {% for epic_group in other_epics_stories %}
+              <optgroup label="{{ epic_group.epic.title }}">
+                {% for s in epic_group.stories %}
+                  <option value="{{ s.id }}">{{ s.title }} ({{ s.computed_status }})</option>
+                {% endfor %}
+              </optgroup>
             {% endfor %}
-          {% else %}
-            <option disabled>No epics available</option>
+          </select>
+        </div>
+        <button type="button" onclick="addDependency()" style="padding:8px 16px;font-size:13px;background:var(--accent);color:white;border:none;border-radius:6px;cursor:pointer;">Add</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Dependents section: Stories that depend on this story -->
+  <div class="content-section">
+    <h3>⬅️ Dependents</h3>
+    <p class="section-hint">Stories that depend on this story:</p>
+    
+    <div class="dependents-list">
+      {% if dependents %}
+        {% for dep in dependents %}
+          <div class="dependency-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
+            <span style="flex:1;">
+              <a href="{% url 'backlog:refine_story' dep.story.id %}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ dep.story.title }}</a>
+              <span style="color:var(--muted);font-size:12px;margin-left:8px;">{{ dep.story.epic.title }}</span>
+              <span class="status-{{ dep.story.computed_status }}" style="font-size:11px;margin-left:8px;text-transform:uppercase;">{{ dep.story.computed_status }}</span>
+            </span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p style="color:var(--muted);font-size:13px;padding:12px;background:var(--surface);border-radius:6px;text-align:center;">✅ No stories depend on this one</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Scoring: Value factors in 3 columns, Cost factors in 1 column -->
+  <div class="content-section">
+    <h3>📊 WSJF Scoring</h3>
+    <p class="section-hint">Rate value factors (business benefit) and cost factors (effort). Result = Value ÷ Cost.</p>
+    <div class="scoring-grid">
+      <!-- Value Column 1 -->
+      <div class="scoring-column">
+        <h4 style="margin:0 0 12px 0;font-size:14px;color:var(--accent);">💎 Value Factors</h4>
+        {% for vsd in value_sections %}
+          {% with col=forloop.counter0|divisibleby:3 %}
+          {% if forloop.counter0|add:"0"|divisibleby:"3" and forloop.counter0|floatformat:"0" == forloop.counter0|floatformat:"0" %}
           {% endif %}
-        </select>
+          {% endwith %}
+          {% if forloop.counter|add:"-1"|divisibleby:3 and forloop.counter != 2 and forloop.counter != 3 or forloop.counter == 1 or forloop.counter == 4 or forloop.counter == 7 or forloop.counter == 10 %}
+          <div class="factor-section">
+            <strong style="font-size:13px;">{{ vsd.section.name }}</strong>
+            <div class="factors">
+              {% for vf_entry in vsd.valuefactors %}
+                <div class="factor-row{% if not vf_entry.selected %} undefined{% endif %}" data-factor-type="vf" data-factor-id="{{ vf_entry.vf.id }}">
+                  <div class="factor-name" style="font-size:13px;">{{ vf_entry.vf.name }}</div>
+                  <div class="radio-grid" role="radiogroup" aria-label="{{ vf_entry.vf.name }} scores">
+                    {% for a in vf_entry.answers %}
+                      <label class="radio-option">
+                        <input type="radio" name="vf_{{ vf_entry.vf.id }}" value="{% if a.id %}{{ a.id }}{% endif %}" {% if a.id == vf_entry.selected or not vf_entry.selected and not a.id %}checked{% endif %}>
+                        <span class="pill" title="{% if a.description %}{{ a.description }}{% endif %}">
+                          <span class="score">{% if a.id %}{{ a.score }}{% else %}—{% endif %}</span>
+                          {% if a.description %}
+                            <span class="desc">{{ a.description }}</span>
+                          {% endif %}
+                        </span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
       </div>
-      <div>
-        <label>Target<br>
-          <textarea name="target" rows="3" style="width:100%;">{{ story.target }}</textarea>
-        </label>
+      
+      <!-- Value Column 2 -->
+      <div class="scoring-column">
+        <h4 style="margin:0 0 12px 0;font-size:14px;color:var(--accent);">💎 Value Factors</h4>
+        {% for vsd in value_sections %}
+          {% if forloop.counter == 2 or forloop.counter == 5 or forloop.counter == 8 or forloop.counter == 11 %}
+          <div class="factor-section">
+            <strong style="font-size:13px;">{{ vsd.section.name }}</strong>
+            <div class="factors">
+              {% for vf_entry in vsd.valuefactors %}
+                <div class="factor-row{% if not vf_entry.selected %} undefined{% endif %}" data-factor-type="vf" data-factor-id="{{ vf_entry.vf.id }}">
+                  <div class="factor-name" style="font-size:13px;">{{ vf_entry.vf.name }}</div>
+                  <div class="radio-grid" role="radiogroup" aria-label="{{ vf_entry.vf.name }} scores">
+                    {% for a in vf_entry.answers %}
+                      <label class="radio-option">
+                        <input type="radio" name="vf_{{ vf_entry.vf.id }}" value="{% if a.id %}{{ a.id }}{% endif %}" {% if a.id == vf_entry.selected or not vf_entry.selected and not a.id %}checked{% endif %}>
+                        <span class="pill" title="{% if a.description %}{{ a.description }}{% endif %}">
+                          <span class="score">{% if a.id %}{{ a.score }}{% else %}—{% endif %}</span>
+                          {% if a.description %}
+                            <span class="desc">{{ a.description }}</span>
+                          {% endif %}
+                        </span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
       </div>
-      <div>
-        <label>Work items<br>
-          <textarea name="workitems" rows="6" style="width:100%;">{{ story.workitems }}</textarea>
-        </label>
+      
+      <!-- Value Column 3 -->
+      <div class="scoring-column">
+        <h4 style="margin:0 0 12px 0;font-size:14px;color:var(--accent);">💎 Value Factors</h4>
+        {% for vsd in value_sections %}
+          {% if forloop.counter == 3 or forloop.counter == 6 or forloop.counter == 9 or forloop.counter == 12 %}
+          <div class="factor-section">
+            <strong style="font-size:13px;">{{ vsd.section.name }}</strong>
+            <div class="factors">
+              {% for vf_entry in vsd.valuefactors %}
+                <div class="factor-row{% if not vf_entry.selected %} undefined{% endif %}" data-factor-type="vf" data-factor-id="{{ vf_entry.vf.id }}">
+                  <div class="factor-name" style="font-size:13px;">{{ vf_entry.vf.name }}</div>
+                  <div class="radio-grid" role="radiogroup" aria-label="{{ vf_entry.vf.name }} scores">
+                    {% for a in vf_entry.answers %}
+                      <label class="radio-option">
+                        <input type="radio" name="vf_{{ vf_entry.vf.id }}" value="{% if a.id %}{{ a.id }}{% endif %}" {% if a.id == vf_entry.selected or not vf_entry.selected and not a.id %}checked{% endif %}>
+                        <span class="pill" title="{% if a.description %}{{ a.description }}{% endif %}">
+                          <span class="score">{% if a.id %}{{ a.score }}{% else %}—{% endif %}</span>
+                          {% if a.description %}
+                            <span class="desc">{{ a.description }}</span>
+                          {% endif %}
+                        </span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
       </div>
-      <div style="margin-top:8px;">
-        <button type="submit">Save</button>
-        <a href="{% url 'backlog:overview' %}">Back</a>
+      
+      <!-- Cost Column -->
+      <div class="scoring-column">
+        <h4 style="margin:0 0 12px 0;font-size:14px;color:var(--danger);">⚖️ Cost Factors</h4>
+        {% for csd in cost_sections %}
+          <div class="factor-section">
+            <strong style="font-size:13px;">{{ csd.section.name }}</strong>
+            <div class="factors">
+              {% for cf_entry in csd.costfactors %}
+                <div class="factor-row{% if not cf_entry.selected %} undefined{% endif %}" data-factor-type="cf" data-factor-id="{{ cf_entry.cf.id }}">
+                  <div class="factor-name" style="font-size:13px;">{{ cf_entry.cf.name }}</div>
+                  <div class="radio-grid" role="radiogroup" aria-label="{{ cf_entry.cf.name }} scores">
+                    {% for a in cf_entry.answers %}
+                      <label class="radio-option">
+                        <input type="radio" name="cf_{{ cf_entry.cf.id }}" value="{% if a.id %}{{ a.id }}{% endif %}" {% if a.id == cf_entry.selected or not cf_entry.selected and not a.id %}checked{% endif %}>
+                        <span class="pill" title="{% if a.description %}{{ a.description }}{% endif %}">
+                          <span class="score">{% if a.id %}{{ a.score }}{% else %}—{% endif %}</span>
+                          {% if a.description %}
+                            <span class="desc">{{ a.description }}</span>
+                          {% endif %}
+                        </span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
       </div>
-  </form>
+    </div>
+  </div>
+</form>
+
+<!-- Fixed save bar at bottom of screen -->
+<div class="fixed-save-bar">
+  <button type="submit" form="refine-form">💾 Save Story</button>
+  {% if story.id %}
+    {% if story.archived %}
+      <form method="post" action="" style="display:inline;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="unarchive_story">
+        <button type="submit" style="padding:10px 16px;font-size:14px;background:var(--accent-2);color:white;border:none;border-radius:8px;cursor:pointer;">📤 Unarchive</button>
+      </form>
+    {% else %}
+      <form method="post" action="" style="display:inline;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="archive_story">
+        <button type="submit" style="padding:10px 16px;font-size:14px;background:var(--muted);color:white;border:none;border-radius:8px;cursor:pointer;">📦 Archive</button>
+      </form>
+    {% endif %}
+  {% endif %}
+  <a href="{% url 'backlog:stories' %}" class="back-link">← Back to Stories</a>
+</div>
+
+<script>
+// Auto-focus title input for new stories (no title yet)
+document.addEventListener('DOMContentLoaded', function() {
+  var titleInput = document.getElementById('title-input');
+  var titleDisplay = document.getElementById('title-display');
+  
+  // Check if this is a new story (no title)
+  if (!titleInput.value.trim()) {
+    // Automatically show and focus the title input
+    titleDisplay.classList.add('hidden');
+    titleInput.classList.add('active');
+    titleInput.focus();
+    titleInput.select();
+  }
+  
+  // Add form validation
+  var form = document.getElementById('refine-form');
+  form.addEventListener('submit', function(e) {
+    var title = titleInput.value.trim();
+    if (!title) {
+      e.preventDefault();
+      alert('⚠️ Please enter a title for the story');
+      // Show and focus the title input
+      titleDisplay.classList.add('hidden');
+      titleInput.classList.add('active');
+      titleInput.focus();
+      titleInput.select();
+      return false;
+    }
+  });
+  
+  // Handle factor selection - remove undefined class when a value is selected
+  document.querySelectorAll('.factor-row input[type="radio"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      var factorRow = this.closest('.factor-row');
+      // Check if the selected value is not empty (not the "—" option)
+      if (this.value) {
+        factorRow.classList.remove('undefined');
+      } else {
+        factorRow.classList.add('undefined');
+      }
+    });
+  });
+});
+
+function showTitleInput() {
+  document.getElementById('title-display').classList.add('hidden');
+  var input = document.getElementById('title-input');
+  input.classList.add('active');
+  input.focus();
+  input.select();
+}
+
+function hideTitleInput() {
+  var input = document.getElementById('title-input');
+  var display = document.getElementById('title-display');
+  var value = input.value.trim();
+  display.textContent = value || 'Click to add title...';
+  input.classList.remove('active');
+  display.classList.remove('hidden');
+}
+
+function showBlockedInput() {
+  document.getElementById('blocked-display').style.display = 'none';
+  document.getElementById('blocked-input-wrapper').classList.add('active');
+  document.getElementById('blocked-input').focus();
+}
+
+function clearBlocked() {
+  document.getElementById('blocked-input').value = '';
+  document.getElementById('blocked-display').style.display = 'block';
+  document.getElementById('blocked-display').textContent = 'Click to add blocker...';
+  document.getElementById('blocked-display').classList.remove('has-text');
+  document.getElementById('blocked-input-wrapper').classList.remove('active');
+}
+
+function addDependency() {
+  var select = document.getElementById('dependency-select');
+  var storyId = select.value;
+  if (!storyId) {
+    alert('Please select a story');
+    return;
+  }
+  // Submit via a hidden form
+  var form = document.getElementById('add-dependency-form');
+  document.getElementById('add-dep-story-id').value = storyId;
+  form.submit();
+}
+</script>
+
+<!-- Hidden forms for dependency actions -->
+{% if story.id %}
+<form id="add-dependency-form" method="post" action="" style="display:none;">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="add_dependency">
+  <input type="hidden" name="dependency_story_id" id="add-dep-story-id" value="">
+</form>
+
+<form id="toggle-review-form" method="post" action="" style="display:none;">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="toggle_review">
+</form>
+
+{% for dep in dependencies %}
+<form id="remove-dep-{{ dep.id }}" method="post" action="" style="display:none;">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="remove_dependency">
+  <input type="hidden" name="dependency_id" value="{{ dep.id }}">
+</form>
+{% endfor %}
+{% endif %}
+
+<!-- History Section -->
+{% if story.id and history %}
+<div class="content-section" style="margin-top:20px;">
+  <h3>📜 History</h3>
+  <p class="section-hint">Recent changes to this story</p>
+  <table class="overview-table" style="font-size:13px;">
+    <thead>
+      <tr>
+        <th style="width:160px;">Timestamp</th>
+        <th style="width:150px;">Field</th>
+        <th>From</th>
+        <th>To</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in history %}
+      <tr>
+        <td style="color:var(--muted);white-space:nowrap;">{{ entry.changed_at|date:"Y-m-d H:i:s" }}</td>
+        <td><strong>{{ entry.field_name }}</strong></td>
+        <td style="color:var(--danger);word-break:break-word;max-width:200px;">
+          {% if entry.old_value %}
+            {{ entry.old_value|truncatechars:100 }}
+          {% else %}
+            <span style="color:var(--muted);font-style:italic;">—</span>
+          {% endif %}
+        </td>
+        <td style="color:var(--accent-2);word-break:break-word;max-width:200px;">
+          {% if entry.new_value %}
+            {{ entry.new_value|truncatechars:100 }}
+          {% else %}
+            <span style="color:var(--muted);font-style:italic;">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 {% endblock %}

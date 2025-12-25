@@ -4,6 +4,7 @@ from django.db import models
 class Epic(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+    archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -14,9 +15,14 @@ class Epic(models.Model):
 class Story(models.Model):
     epic = models.ForeignKey(Epic, related_name="stories", on_delete=models.CASCADE)
     title = models.CharField(max_length=200)
-    target = models.CharField(max_length=200, blank=True)
+    goal = models.CharField(max_length=200, blank=True)
     workitems = models.TextField(blank=True)
-    description = models.TextField(blank=True)
+    planned = models.DateTimeField(null=True, blank=True)
+    started = models.DateTimeField(null=True, blank=True)
+    finished = models.DateTimeField(null=True, blank=True)
+    blocked = models.TextField(blank=True)
+    archived = models.BooleanField(default=False)
+    review_required = models.BooleanField(default=False)
     STATUS_NEW = 'new'
     STATUS_REFINED = 'refined'
     STATUS_CHOICES = [(STATUS_NEW, 'New'), (STATUS_REFINED, 'Refined')]
@@ -24,11 +30,54 @@ class Story(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    @property
+    def computed_status(self):
+        """
+        Returns the computed status based on:
+        - 'blocked' if blocked field has text
+        - 'done' if finished datetime is set
+        - 'started' if started datetime is set
+        - 'planned' if planned datetime is set
+        - 'ready' if all text fields and scores are set
+        - 'idea' if any score is undefined or any text field is empty
+        """
+        # Priority order: blocked > done > started > planned > ready > idea
+        if self.blocked and self.blocked.strip():
+            return 'blocked'
+        if self.finished:
+            return 'done'
+        if self.started:
+            return 'started'
+        if self.planned:
+            return 'planned'
+        
+        # Check if all text fields are filled
+        has_title = bool(self.title and self.title.strip())
+        has_goal = bool(self.goal and self.goal.strip())
+        has_workitems = bool(self.workitems and self.workitems.strip())
+        
+        if not (has_title and has_goal and has_workitems):
+            return 'idea'
+        
+        # Check if all value factors have scores
+        all_value_factors = ValueFactor.objects.all()
+        for vf in all_value_factors:
+            if not self.scores.filter(valuefactor=vf).exists():
+                return 'idea'
+        
+        # Check if all cost factors have scores
+        all_cost_factors = CostFactor.objects.all()
+        for cf in all_cost_factors:
+            if not self.cost_scores.filter(costfactor=cf).exists():
+                return 'idea'
+        
+        return 'ready'
+
     def save(self, *args, **kwargs):
-        # ensure status is 'refined' when both target and workitems are provided
-        has_target = bool(self.target and self.target.strip())
+        # ensure status is 'refined' when both goal and workitems are provided
+        has_goal = bool(self.goal and self.goal.strip())
         has_work = bool(self.workitems and self.workitems.strip())
-        desired = self.STATUS_REFINED if (has_target and has_work) else self.STATUS_NEW
+        desired = self.STATUS_REFINED if (has_goal and has_work) else self.STATUS_NEW
         if self.status != desired:
             self.status = desired
         super().save(*args, **kwargs)
@@ -217,3 +266,35 @@ def ensure_scores_for_story(sender, instance: Story, created, **kwargs):
             costfactor=cf,
             defaults={"answer": zero_ans},
         )
+
+
+class StoryDependency(models.Model):
+    """A dependency relationship between stories. The story depends on depends_on."""
+    story = models.ForeignKey(Story, related_name="dependencies", on_delete=models.CASCADE)
+    depends_on = models.ForeignKey(Story, related_name="dependents", on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "story dependency"
+        verbose_name_plural = "story dependencies"
+        unique_together = [['story', 'depends_on']]
+
+    def __str__(self):
+        return f"{self.story.title} → {self.depends_on.title}"
+
+
+class StoryHistory(models.Model):
+    """Tracks changes made to a story over time."""
+    story = models.ForeignKey(Story, related_name="history", on_delete=models.CASCADE)
+    field_name = models.CharField(max_length=100)
+    old_value = models.TextField(blank=True, null=True)
+    new_value = models.TextField(blank=True, null=True)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "story history"
+        verbose_name_plural = "story histories"
+        ordering = ['-changed_at']
+
+    def __str__(self):
+        return f"{self.story.title}: {self.field_name} changed at {self.changed_at}"

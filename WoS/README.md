@@ -1,47 +1,60 @@
 # WoS - WSJF on Steroids
 
 ## Overview
-WoS is a web application designed to help teams manage their backlog of work items, specifically focusing on 'epics' and 'stories'. The application provides a user-friendly interface to create, view, and manage these work items, facilitating better prioritization and planning.
-
-## Setup Instructions
-
-1. **Clone the Repository**
-   ```bash
-   git clone <repository-url>
-   cd WoS
-   ```
-
-2. **Create a Virtual Environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
-
-3. **Install Requirements**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Run Migrations**
-   ```bash
-   python manage.py migrate
-   ```
-
-5. **Run the Development Server**
-   ```bash
-   python manage.py runserver
-   ```
-
-6. **Access the Application**
-   Open your web browser and go to `http://127.0.0.1:8000/`.
+WoS is a web application designed to help teams manage their backlog of work items using WSJF (Weighted Shortest Job First) prioritization. The application provides a user-friendly interface to create, view, and manage epics and stories with value/cost factor scoring, kanban boards, and comprehensive reporting.
 
 ## Features
-- Create and manage epics and stories.
-- User-friendly interface for backlog management.
-- SQLite database for lightweight data storage.
+- **Epic & Story Management**: Create and manage epics and stories with rich metadata
+- **WSJF Scoring**: Configure value factors and cost factors with customizable scoring sections
+- **Computed Status**: Automatic status tracking (new → todo → planned → started → done/blocked)
+- **Kanban Board**: Drag-and-drop interface to move stories through workflow stages
+- **Reporting**: Per-section averages, value/cost ratios with filtering
+- **Dark/Light Theme**: Toggle between themes with OS preference detection
+- **Health Check**: `/backlog/health/` endpoint for container orchestration
+
+## Quick Start
+
+### Option 1: Docker (Recommended)
+```bash
+docker compose up --build
+```
+Access at `http://localhost:8000/`
+
+### Option 2: Local Development
+```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run migrations
+python manage.py migrate
+
+# Start development server
+python manage.py runserver
+```
+Access at `http://127.0.0.1:8000/`
+
+## Environment Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DJANGO_SECRET_KEY` | `your-secret-key` | Secret key for production |
+| `DJANGO_DEBUG` | `False` | Enable debug mode |
+| `DJANGO_ALLOWED_HOSTS` | `*` | Comma-separated allowed hosts |
+
+## URL Structure
+- `/` - Redirects to `/backlog/`
+- `/backlog/` - Epics overview (main dashboard)
+- `/backlog/stories/` - Stories list with filters
+- `/backlog/kanban/` - Kanban board
+- `/backlog/report/` - WSJF report with scoring
+- `/backlog/health/` - Health check endpoint
+- `/admin/` - Django admin interface
 
 ## Contributing
-Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
+Contributions are welcome! Please open an issue or submit a pull request.
 
 ## License
-This project is licensed under the MIT License. See the LICENSE file for more details.
+This project is licensed under the MIT License. See the LICENSE file for details.
