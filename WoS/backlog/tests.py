@@ -1155,6 +1155,55 @@ class ReportViewTests(BaseTestCase):
         self.assertContains(response, "Active Story")
         self.assertNotContains(response, "Archived Story")
 
+    def test_report_has_tweak_mode_button(self):
+        """Test report page has tweak mode button for temporary score adjustments."""
+        response = self.client.get(reverse('backlog:report'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="toggle-tweak-mode"')
+        self.assertContains(response, 'Tweak Mode')
+
+    def test_report_has_reset_button(self):
+        """Test report page has reset button for tweak mode."""
+        response = self.client.get(reverse('backlog:report'))
+        self.assertContains(response, 'id="reset-tweaks"')
+
+    def test_report_value_cells_have_tweak_attributes(self):
+        """Test report value cells have data attributes needed for tweak mode."""
+        story = Story.objects.create(epic=self.epic, title="Test Story")
+        StoryValueFactorScore.objects.update_or_create(
+            story=story,
+            valuefactor=self.value_factor,
+            defaults={"answer": self.vf_answer_10}
+        )
+        StoryCostFactorScore.objects.update_or_create(
+            story=story,
+            costfactor=self.cost_factor,
+            defaults={"answer": self.cf_answer_2}
+        )
+        
+        response = self.client.get(reverse('backlog:report'))
+        content = response.content.decode('utf-8')
+        
+        # Check for value-total-cell with data attributes
+        self.assertIn('class="value-total-cell"', content)
+        # Value is now the average of section scores (10.0 for single factor)
+        self.assertIn('data-original="10', content)
+        
+        # Check for cost-total-cell with data attributes
+        self.assertIn('class="cost-total-cell"', content)
+        # Cost is now the average of section scores (2.0 for single factor)
+        self.assertIn('data-original="2', content)
+        
+        # Check for tweak input fields
+        self.assertIn('class="tweak-input"', content)
+
+    def test_report_has_tweak_hint(self):
+        """Test report page has tweak mode hint that explains the feature."""
+        response = self.client.get(reverse('backlog:report'))
+        self.assertContains(response, 'id="tweak-hint"')
+        self.assertContains(response, 'Tweak Mode Active')
+        self.assertContains(response, 'NOT saved')
+
 
 class WBSViewTests(BaseTestCase):
     """Tests for Work Breakdown Structure view."""

@@ -1,34 +1,55 @@
-from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Count, Q
-from django.http import JsonResponse
-from django.views.decorators.http import require_POST
-from django.utils import timezone
-from django.contrib import messages
+"""
+Views for the WoS (WSJF on Steroids) backlog application.
+
+This module provides views for:
+- Epic and Story CRUD operations
+- Kanban board with drag-and-drop workflow
+- WSJF scoring report with section averages
+- Work Breakdown Structure (WBS) visualization
+- Story refinement with value/cost factor scoring
+"""
 import json
 
+from django.contrib import messages
+from django.db.models import Count, Q
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
 from .models import (
+    CostFactor,
+    CostFactorAnswer,
+    CostFactorSection,
     Epic,
     Story,
-    ValueFactorSection,
-    CostFactorSection,
-    ValueFactor,
-    CostFactor,
-    ValueFactorAnswer,
-    CostFactorAnswer,
-    StoryValueFactorScore,
     StoryCostFactorScore,
     StoryDependency,
     StoryHistory,
+    StoryValueFactorScore,
+    ValueFactor,
+    ValueFactorAnswer,
+    ValueFactorSection,
 )
 
 
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+
 def track_story_change(story, field_name, old_value, new_value):
-    """Record a change to a story field in the history."""
-    # Convert values to strings for comparison and storage
+    """Record a change to a story field in the history.
+    
+    Args:
+        story: The Story instance being modified
+        field_name: Name of the field that changed
+        old_value: Previous value (will be converted to string)
+        new_value: New value (will be converted to string)
+    """
     old_str = str(old_value) if old_value is not None else ''
     new_str = str(new_value) if new_value is not None else ''
     
-    # Only record if values actually changed
     if old_str != new_str:
         StoryHistory.objects.create(
             story=story,
@@ -38,9 +59,127 @@ def track_story_change(story, field_name, old_value, new_value):
         )
 
 
+def _build_factor_section_data(sections, factor_attr, answers_map, with_tooltips=False):
+    """Build section data structure for value or cost factor sections.
+    
+    This is a helper function to reduce code duplication between value and cost
+    factor processing in report_view and other views.
+    
+    Args:
+        sections: QuerySet of ValueFactorSection or CostFactorSection
+        factor_attr: Attribute name to access factors ('valuefactors' or 'costfactors')
+        answers_map: Dict mapping factor_id -> (score, answer_description) or factor_id -> score
+        with_tooltips: Whether to build detailed tooltips (for report view)
+        
+    Returns:
+        List of dicts with section data including averages and optionally tooltips
+    """
+    section_data = []
+    
+    for section in sections:
+        factors_detail = []
+        vals = []
+        
+        for factor in getattr(section, factor_attr).all():
+            score_info = answers_map.get(factor.id)
+            
+            if score_info is not None:
+                # Handle both tuple (score, desc) and plain score formats
+                if isinstance(score_info, tuple):
+                    sc, answer_desc = score_info
+                else:
+                    sc, answer_desc = score_info, None
+                vals.append(sc)
+                factors_detail.append({
+                    'name': factor.name,
+                    'description': getattr(factor, 'description', ''),
+                    'score': sc,
+                    'answer_description': answer_desc
+                })
+            else:
+                factors_detail.append({
+                    'name': factor.name,
+                    'description': getattr(factor, 'description', ''),
+                    'score': None,
+                    'answer_description': None
+                })
+        
+        if vals:
+            avg = sum(vals) / len(vals)
+            tooltip = ''
+            if with_tooltips:
+                tooltip = _build_factor_tooltip(factors_detail, sum(vals), len(vals), avg)
+            section_data.append({
+                'avg': avg,
+                'factors': factors_detail,
+                'tooltip': tooltip
+            })
+        else:
+            tooltip = ''
+            if with_tooltips:
+                tooltip_lines = [f"• {f['name']}: —" for f in factors_detail]
+                tooltip_lines.append('\nNo scores set')
+                tooltip = '\n'.join(tooltip_lines)
+            section_data.append({'avg': None, 'factors': factors_detail, 'tooltip': tooltip})
+    
+    return section_data
+
+
+def _build_factor_tooltip(factors_detail, total, count, avg):
+    """Build a multi-line tooltip showing factor breakdown.
+    
+    Args:
+        factors_detail: List of factor dicts with name, score, description, answer_description
+        total: Sum of scores
+        count: Number of scores
+        avg: Calculated average
+        
+    Returns:
+        Multi-line string for tooltip display
+    """
+    tooltip_lines = []
+    for f in factors_detail:
+        if f['score'] is not None:
+            line = f"• {f['name']}: {f['score']}"
+            if f.get('answer_description'):
+                line += f" ({f['answer_description']})"
+            if f.get('description'):
+                line += f"\n  {f['description']}"
+            tooltip_lines.append(line)
+        else:
+            tooltip_lines.append(f"• {f['name']}: —")
+    tooltip_lines.append(f"\nAverage: {total} ÷ {count} = {avg:.1f}")
+    return '\n'.join(tooltip_lines)
+
+
+def _build_answers_with_undefined(answers_qs):
+    """Build answers list with an 'Undefined' option prepended.
+    
+    Args:
+        answers_qs: QuerySet of ValueFactorAnswer or CostFactorAnswer
+        
+    Returns:
+        List with undefined option followed by actual answers
+    """
+    answers = list(answers_qs.order_by('score'))
+    return [{'id': '', 'score': '—', 'description': 'Undefined'}] + answers
+
+
+# =============================================================================
+# Epic Views
+# =============================================================================
+
+
 def overview(request):
-    """Overview: show a list of Epics. Clicking an epic should go to the stories page filtered by that epic."""
-    # handle epic create/edit/delete/archive from the overview header inline form
+    """Overview page showing all epics with their story counts.
+    
+    Supports:
+    - Search filtering by title/description
+    - Sorting by title, created date, updated date, or story count
+    - Toggle between active and archived epics
+    - Inline create/edit/delete/archive actions
+    """
+    # Handle epic create/edit/delete/archive from the overview inline form
     if request.method == "POST":
         action = request.POST.get('action')
         if action == 'create_epic':
@@ -123,8 +262,22 @@ def overview(request):
     return render(request, 'backlog/overview.html', context)
 
 
+# =============================================================================
+# Story Views
+# =============================================================================
+
+
 def refine_story(request, pk):
-    """Separate page to refine a story: edit target and workitems."""
+    """Refine an existing story with full editing capabilities.
+    
+    This view allows editing:
+    - Basic info: title, epic, goal, workitems
+    - Value/cost factor scores
+    - Dependencies on other stories
+    - Archive/unarchive and review flags
+    
+    Also displays story history and dependent stories.
+    """
     story = get_object_or_404(Story, pk=pk)
     epics = Epic.objects.order_by("title")
     # load factor sections for scoring UI
@@ -472,7 +625,15 @@ def create_story_refine(request):
 
 
 def story_list(request):
-    """List stories (optionally filtered by epic via ?epic=ID). Supports search and sorting."""
+    """List all stories with filtering and sorting capabilities.
+    
+    Supports:
+    - Filter by epic, computed status, review required flag
+    - Search by title, goal, or workitems
+    - Sort by title, epic, created date, or status
+    - Toggle between active and archived stories
+    - Inline archive/unarchive/delete actions
+    """
     # Handle POST actions for archiving
     if request.method == "POST":
         action = request.POST.get('action')
@@ -591,8 +752,25 @@ def story_list(request):
     return render(request, 'backlog/stories.html', context)
 
 
+# =============================================================================
+# Report View
+# =============================================================================
+
+
 def report_view(request):
-    # Build report: per-section averages for value and cost factors, per-story totals and ratio
+    """WSJF scoring report showing value/cost breakdown and prioritization.
+    
+    Calculates for each story:
+    - Per-section average scores for value and cost factors
+    - Total value = sum of value section averages
+    - Total cost = sum of cost section averages  
+    - Result = total value / total cost (WSJF score)
+    
+    Features:
+    - Filter by epic or computed status
+    - Tooltips showing factor breakdown for each section
+    - Tweak mode for temporary score adjustments
+    """
     epic_id = request.GET.get('epic')
     status_filter = request.GET.get('status', '')
     all_epics = Epic.objects.filter(archived=False).order_by('title')
@@ -622,38 +800,128 @@ def report_view(request):
 
     rows = []
     for s in stories_qs:
-        # maps of factor id -> numeric score
-        vf_map = {sv.valuefactor_id: sv.answer.score for sv in s.scores.all()}
-        cf_map = {sv.costfactor_id: sv.answer.score for sv in s.cost_scores.all()}
+        # maps of factor id -> (score, answer_description)
+        vf_map = {sv.valuefactor_id: (sv.answer.score, sv.answer.description) for sv in s.scores.all()}
+        cf_map = {sv.costfactor_id: (sv.answer.score, sv.answer.description) for sv in s.cost_scores.all()}
 
-        # per-value-section averages (ordered to match value_sections)
-        value_section_avgs = []
+        # per-value-section averages with breakdown details for tooltips
+        value_section_data = []
         for vs in value_sections:
+            factors_detail = []
             vals = []
             for vf in vs.valuefactors.all():
-                sc = vf_map.get(vf.id)
-                if sc is not None:
+                score_info = vf_map.get(vf.id)
+                if score_info is not None:
+                    sc, answer_desc = score_info
                     vals.append(sc)
+                    factors_detail.append({
+                        'name': vf.name,
+                        'description': vf.description,
+                        'score': sc,
+                        'answer_description': answer_desc
+                    })
+                else:
+                    factors_detail.append({
+                        'name': vf.name,
+                        'description': vf.description,
+                        'score': None,
+                        'answer_description': None
+                    })
             if vals:
-                value_section_avgs.append(sum(vals) / len(vals))
+                avg = sum(vals) / len(vals)
+                # Build multi-line tooltip with factor details
+                tooltip_lines = []
+                for f in factors_detail:
+                    if f['score'] is not None:
+                        line = f"• {f['name']}: {f['score']}"
+                        if f['answer_description']:
+                            line += f" ({f['answer_description']})"
+                        if f['description']:
+                            line += f"\n  {f['description']}"
+                        tooltip_lines.append(line)
+                    else:
+                        tooltip_lines.append(f"• {f['name']}: —")
+                tooltip_lines.append(f"\nAverage: {sum(vals)} ÷ {len(vals)} = {avg:.1f}")
+                value_section_data.append({
+                    'avg': avg,
+                    'factors': factors_detail,
+                    'tooltip': '\n'.join(tooltip_lines)
+                })
             else:
-                value_section_avgs.append(None)
+                tooltip_lines = [f"• {f['name']}: —" for f in factors_detail]
+                tooltip_lines.append('\nNo scores set')
+                value_section_data.append({'avg': None, 'factors': factors_detail, 'tooltip': '\n'.join(tooltip_lines)})
 
-        # per-cost-section averages (ordered to match cost_sections)
-        cost_section_avgs = []
+        # per-cost-section averages with breakdown details for tooltips
+        cost_section_data = []
         for cs in cost_sections:
+            factors_detail = []
             vals = []
             for cf in cs.costfactors.all():
-                sc = cf_map.get(cf.id)
-                if sc is not None:
+                score_info = cf_map.get(cf.id)
+                if score_info is not None:
+                    sc, answer_desc = score_info
                     vals.append(sc)
+                    factors_detail.append({
+                        'name': cf.name,
+                        'description': cf.description,
+                        'score': sc,
+                        'answer_description': answer_desc
+                    })
+                else:
+                    factors_detail.append({
+                        'name': cf.name,
+                        'description': cf.description,
+                        'score': None,
+                        'answer_description': None
+                    })
             if vals:
-                cost_section_avgs.append(sum(vals) / len(vals))
+                avg = sum(vals) / len(vals)
+                # Build multi-line tooltip with factor details
+                tooltip_lines = []
+                for f in factors_detail:
+                    if f['score'] is not None:
+                        line = f"• {f['name']}: {f['score']}"
+                        if f['answer_description']:
+                            line += f" ({f['answer_description']})"
+                        if f['description']:
+                            line += f"\n  {f['description']}"
+                        tooltip_lines.append(line)
+                    else:
+                        tooltip_lines.append(f"• {f['name']}: —")
+                tooltip_lines.append(f"\nAverage: {sum(vals)} ÷ {len(vals)} = {avg:.1f}")
+                cost_section_data.append({
+                    'avg': avg,
+                    'factors': factors_detail,
+                    'tooltip': '\n'.join(tooltip_lines)
+                })
             else:
-                cost_section_avgs.append(None)
+                tooltip_lines = [f"• {f['name']}: —" for f in factors_detail]
+                tooltip_lines.append('\nNo scores set')
+                cost_section_data.append({'avg': None, 'factors': factors_detail, 'tooltip': '\n'.join(tooltip_lines)})
 
-        value_sum = sum(vf_map.values()) if vf_map else 0
-        cost_sum = sum(cf_map.values()) if cf_map else 0
+        # For backwards compatibility, extract just the averages
+        value_section_avgs = [d['avg'] for d in value_section_data]
+        cost_section_avgs = [d['avg'] for d in cost_section_data]
+
+        # Total Value = sum of section averages (not sum of all individual scores)
+        value_sum = sum(avg for avg in value_section_avgs if avg is not None)
+        # Total Cost = sum of section averages (not sum of all individual scores)
+        cost_sum = sum(avg for avg in cost_section_avgs if avg is not None)
+        
+        # Build tooltip for totals
+        value_total_tooltip = ' + '.join(f"{value_sections[i].name}: {d['avg']:.1f}" for i, d in enumerate(value_section_data) if d['avg'] is not None)
+        if value_total_tooltip:
+            value_total_tooltip += f" = {value_sum:.1f}"
+        else:
+            value_total_tooltip = "No section scores"
+            
+        cost_total_tooltip = ' + '.join(f"{cost_sections[i].name}: {d['avg']:.1f}" for i, d in enumerate(cost_section_data) if d['avg'] is not None)
+        if cost_total_tooltip:
+            cost_total_tooltip += f" = {cost_sum:.1f}"
+        else:
+            cost_total_tooltip = "No section scores"
+        
         result = None
         if cost_sum:
             try:
@@ -666,15 +934,26 @@ def report_view(request):
             result_class = "neutral"
         else:
             result_class = "good" if result >= 1 else "bad"
+            
+        # Build result tooltip
+        if result is not None:
+            result_tooltip = f"Value ({value_sum:.1f}) ÷ Cost ({cost_sum:.1f}) = {result:.2f}"
+        else:
+            result_tooltip = "Cannot calculate (no cost)"
 
         rows.append(
             {
                 "story": s,
+                "value_section_data": value_section_data,
+                "cost_section_data": cost_section_data,
                 "value_section_avgs": value_section_avgs,
                 "cost_section_avgs": cost_section_avgs,
                 "value_sum": value_sum,
                 "cost_sum": cost_sum,
+                "value_total_tooltip": value_total_tooltip,
+                "cost_total_tooltip": cost_total_tooltip,
                 "result": result,
+                "result_tooltip": result_tooltip,
                 "result_class": result_class,
             }
         )
@@ -694,16 +973,34 @@ def report_view(request):
 
 
 def _calculate_story_score(story):
-    """Calculate value/cost result for a story (same as report logic)."""
-    # Sum value scores
-    total_value = 0
-    for sv in story.scores.select_related('answer').all():
-        total_value += sv.answer.score if sv.answer else 0
+    """Calculate value/cost result for a story (same as report logic).
     
-    # Sum cost scores
-    total_cost = 0
-    for sc in story.cost_scores.select_related('answer').all():
-        total_cost += sc.answer.score if sc.answer else 0
+    Score = sum of section averages for value / sum of section averages for cost
+    """
+    # Get all sections
+    value_sections = ValueFactorSection.objects.prefetch_related("valuefactors").all()
+    cost_sections = CostFactorSection.objects.prefetch_related("costfactors").all()
+    
+    # Build maps of factor id -> score
+    vf_map = {sv.valuefactor_id: sv.answer.score for sv in story.scores.select_related('answer').all() if sv.answer}
+    cf_map = {sc.costfactor_id: sc.answer.score for sc in story.cost_scores.select_related('answer').all() if sc.answer}
+    
+    # Calculate value section averages and sum them
+    value_section_avgs = []
+    for vs in value_sections:
+        vals = [vf_map[vf.id] for vf in vs.valuefactors.all() if vf.id in vf_map]
+        if vals:
+            value_section_avgs.append(sum(vals) / len(vals))
+    
+    # Calculate cost section averages and sum them
+    cost_section_avgs = []
+    for cs in cost_sections:
+        vals = [cf_map[cf.id] for cf in cs.costfactors.all() if cf.id in cf_map]
+        if vals:
+            cost_section_avgs.append(sum(vals) / len(vals))
+    
+    total_value = sum(value_section_avgs) if value_section_avgs else 0
+    total_cost = sum(cost_section_avgs) if cost_section_avgs else 0
     
     # Calculate result (value / cost), handle division by zero
     if total_cost > 0:
@@ -714,8 +1011,25 @@ def _calculate_story_score(story):
     return {'value': total_value, 'cost': total_cost, 'result': result}
 
 
+# =============================================================================
+# Kanban Board
+# =============================================================================
+
+
 def kanban_view(request):
-    """Kanban board with columns grouped by computed status, score result, and sorting."""
+    """Kanban board showing stories in workflow columns.
+    
+    Columns:
+    - Backlog: Stories with 'ready' status
+    - Planned: Stories with 'planned' status  
+    - Doing: Stories with 'started' status
+    - Blocked: Stories with 'blocked' status
+    - Done: Stories with 'done' status
+    
+    Stories with 'idea' status are excluded from the board.
+    
+    Supports filtering by epic and sorting by result, status, or dates.
+    """
     epic_id = request.GET.get('epic')
     sort_by = request.GET.get('sort', 'result')  # result, status, started, blocked, finished
     sort_order = request.GET.get('order', 'desc')
@@ -872,10 +1186,16 @@ def kanban_move(request):
     })
 
 
-def health(request):
-    """Simple health check endpoint.
+# =============================================================================
+# Utility Views
+# =============================================================================
 
-    Returns 200 OK with JSON. Attempts a trivial DB query to ensure connectivity.
+
+def health(request):
+    """Health check endpoint for container orchestration.
+
+    Returns 200 OK with JSON if database is accessible, 500 otherwise.
+    Useful for Kubernetes/Docker health probes.
     """
     try:
         _ = Story.objects.exists()
@@ -885,19 +1205,26 @@ def health(request):
 
 
 def create_epic(request):
-    """Server-side page to create a new Epic. GET shows a small form, POST creates and redirects to overview."""
+    """Create a new Epic via dedicated form page.
+    
+    GET: Display the creation form
+    POST: Create epic and redirect to overview
+    """
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         description = request.POST.get('description', '').strip()
         if title:
             Epic.objects.create(title=title, description=description)
             return redirect('backlog:index')
-        # if invalid, fall through and re-render the form with an error
     return render(request, 'backlog/create_epic.html', {})
 
 
 def edit_epic(request, pk):
-    """Edit an existing Epic with consistent look and feel."""
+    """Edit an existing Epic.
+    
+    GET: Display edit form with current values
+    POST: Update epic and redirect to overview
+    """
     epic = get_object_or_404(Epic, pk=pk)
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
@@ -911,8 +1238,21 @@ def edit_epic(request, pk):
     return render(request, 'backlog/edit_epic.html', {'epic': epic})
 
 
+# =============================================================================
+# Work Breakdown Structure (WBS)
+# =============================================================================
+
+
 def wbs_view(request):
-    """Work Breakdown Structure - visual overview of stories and their dependencies."""
+    """Work Breakdown Structure showing stories with dependencies.
+    
+    Displays:
+    - Stories grouped by epic in a grid layout
+    - Dependency relationships between stories
+    - Gantt-style bars showing relative cost/effort
+    
+    Supports filtering by epic and AJAX dependency management.
+    """
     epic_id = request.GET.get('epic', '')
     all_epics = Epic.objects.filter(archived=False).order_by('title')
     

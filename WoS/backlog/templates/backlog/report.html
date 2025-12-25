@@ -7,6 +7,8 @@
 <div class="page-head">
   <h2>📊 WSJF Score Report</h2>
   <div class="page-actions">
+    <button class="btn" id="toggle-tweak-mode" title="Enable tweaking scores to see ordering changes">🔧 Tweak Mode</button>
+    <button class="btn" id="reset-tweaks" style="display:none;" title="Reset all tweaked values">↩️ Reset</button>
     <a class="btn" href="{% url 'backlog:stories' %}">📋 Stories</a>
     <a class="btn" href="{% url 'backlog:kanban' %}">📌 Kanban</a>
   </div>
@@ -16,6 +18,11 @@
   <strong>💡 How WSJF works:</strong> Stories are scored by <strong>Value</strong> (business benefit) and <strong>Cost</strong> (effort). 
   The <strong>Result = Value ÷ Cost</strong> — higher is better! 🟢 Green rows have the best scores, 🔴 red rows the lowest.
   Click any column header to sort.
+</div>
+
+<div id="tweak-hint" class="page-hint" style="display:none; background: var(--warning-bg, #fff3cd); border-left: 4px solid var(--warning, #ffc107);">
+  <strong>🔧 Tweak Mode Active:</strong> Click on <strong>Value</strong> or <strong>Cost</strong> cells to temporarily adjust scores and see how ordering changes.
+  Changes are <strong>NOT saved</strong> — use the refine page to save actual changes.
 </div>
 
 <form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -83,31 +90,33 @@
         <td class="status-{{ r.story.computed_status }}" data-value="{{ r.story.computed_status }}">
           {{ r.story.computed_status|upper }}
         </td>
-        {% for avg in r.value_section_avgs %}
-          <td data-value="{% if avg is not None %}{{ avg }}{% else %}-999{% endif %}" style="text-align:center;">
-            {% if avg is not None %}
-              {{ avg|floatformat:1 }}
+        {% for section_data in r.value_section_data %}
+          <td class="score-cell" data-value="{% if section_data.avg is not None %}{{ section_data.avg }}{% else %}-999{% endif %}" style="text-align:center;" title="{{ section_data.tooltip }}">
+            {% if section_data.avg is not None %}
+              {{ section_data.avg|floatformat:1 }}
             {% else %}
               <span style="color:var(--muted);">—</span>
             {% endif %}
           </td>
         {% endfor %}
-        <td data-value="{{ r.value_sum }}" style="text-align:center;font-weight:600;">
-          {{ r.value_sum }}
+        <td class="value-total-cell" data-value="{{ r.value_sum }}" data-original="{{ r.value_sum }}" data-story-id="{{ r.story.id }}" style="text-align:center;font-weight:600;" title="{{ r.value_total_tooltip }}">
+          <span class="display-value">{{ r.value_sum|floatformat:1 }}</span>
+          <input type="number" class="tweak-input" value="{{ r.value_sum }}" min="0" step="0.1" style="display:none; width:60px; text-align:center;">
         </td>
-        {% for avg in r.cost_section_avgs %}
-          <td data-value="{% if avg is not None %}{{ avg }}{% else %}-999{% endif %}" style="text-align:center;">
-            {% if avg is not None %}
-              {{ avg|floatformat:1 }}
+        {% for section_data in r.cost_section_data %}
+          <td class="score-cell" data-value="{% if section_data.avg is not None %}{{ section_data.avg }}{% else %}-999{% endif %}" style="text-align:center;" title="{{ section_data.tooltip }}">
+            {% if section_data.avg is not None %}
+              {{ section_data.avg|floatformat:1 }}
             {% else %}
               <span style="color:var(--muted);">—</span>
             {% endif %}
           </td>
         {% endfor %}
-        <td data-value="{{ r.cost_sum }}" style="text-align:center;font-weight:600;">
-          {{ r.cost_sum }}
+        <td class="cost-total-cell" data-value="{{ r.cost_sum }}" data-original="{{ r.cost_sum }}" data-story-id="{{ r.story.id }}" style="text-align:center;font-weight:600;" title="{{ r.cost_total_tooltip }}">
+          <span class="display-value">{{ r.cost_sum|floatformat:1 }}</span>
+          <input type="number" class="tweak-input" value="{{ r.cost_sum }}" min="0" step="0.1" style="display:none; width:60px; text-align:center;">
         </td>
-        <td class="result-cell" data-value="{% if r.result is not None %}{{ r.result }}{% else %}-999{% endif %}" style="text-align:center;">
+        <td class="result-cell" data-value="{% if r.result is not None %}{{ r.result }}{% else %}-999{% endif %}" data-story-id="{{ r.story.id }}" style="text-align:center;" title="{{ r.result_tooltip }}">
           {% if r.result is None %}
             <span style="color:var(--muted);">—</span>
           {% else %}
@@ -148,6 +157,44 @@
   /* Row gradient colors will be applied via JS */
   #report-table tbody tr {
     transition: background 0.2s;
+  }
+  
+  /* Tweak mode styles */
+  .tweak-mode .value-total-cell,
+  .tweak-mode .cost-total-cell {
+    cursor: pointer;
+    position: relative;
+  }
+  .tweak-mode .value-total-cell:hover,
+  .tweak-mode .cost-total-cell:hover {
+    background: var(--surface) !important;
+    outline: 2px dashed var(--primary, #007bff);
+  }
+  .tweak-input {
+    border: 1px solid var(--primary, #007bff);
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-weight: 600;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .tweak-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  }
+  .tweaked {
+    background: rgba(255, 193, 7, 0.2) !important;
+  }
+  .tweaked .display-value {
+    color: var(--warning, #ffc107);
+  }
+  .tweaked .display-value::after {
+    content: ' *';
+    font-size: 0.8em;
+  }
+  #toggle-tweak-mode.active {
+    background: var(--warning, #ffc107);
+    color: #000;
   }
 </style>
 
@@ -264,6 +311,139 @@
     // Click twice: first for ascending, second for descending
     lastHeader.click(); // asc
     lastHeader.click(); // desc
+  }
+  
+  // ===== TWEAK MODE FUNCTIONALITY =====
+  var tweakMode = false;
+  var toggleBtn = document.getElementById('toggle-tweak-mode');
+  var resetBtn = document.getElementById('reset-tweaks');
+  var tweakHint = document.getElementById('tweak-hint');
+  
+  // Toggle tweak mode
+  toggleBtn.addEventListener('click', function() {
+    tweakMode = !tweakMode;
+    table.classList.toggle('tweak-mode', tweakMode);
+    toggleBtn.classList.toggle('active', tweakMode);
+    toggleBtn.textContent = tweakMode ? '🔧 Tweak Mode ON' : '🔧 Tweak Mode';
+    tweakHint.style.display = tweakMode ? 'block' : 'none';
+    
+    // Show/hide reset button if there are any tweaked values
+    updateResetButton();
+  });
+  
+  // Reset all tweaked values
+  resetBtn.addEventListener('click', function() {
+    var tweakedCells = document.querySelectorAll('.value-total-cell.tweaked, .cost-total-cell.tweaked');
+    tweakedCells.forEach(function(cell) {
+      var original = cell.getAttribute('data-original');
+      var displaySpan = cell.querySelector('.display-value');
+      var input = cell.querySelector('.tweak-input');
+      
+      cell.setAttribute('data-value', original);
+      displaySpan.textContent = original;
+      input.value = original;
+      cell.classList.remove('tweaked');
+      
+      // Update the result for this row
+      updateRowResult(cell.closest('tr'));
+    });
+    
+    applyGradientColors();
+    updateResetButton();
+  });
+  
+  function updateResetButton() {
+    var hasTweaks = document.querySelectorAll('.value-total-cell.tweaked, .cost-total-cell.tweaked').length > 0;
+    resetBtn.style.display = hasTweaks ? 'inline-block' : 'none';
+  }
+  
+  // Make value and cost cells editable in tweak mode
+  document.querySelectorAll('.value-total-cell, .cost-total-cell').forEach(function(cell) {
+    var displaySpan = cell.querySelector('.display-value');
+    var input = cell.querySelector('.tweak-input');
+    
+    // Click to edit
+    cell.addEventListener('click', function(e) {
+      if (!tweakMode) return;
+      if (e.target === input) return;
+      
+      displaySpan.style.display = 'none';
+      input.style.display = 'inline-block';
+      input.focus();
+      input.select();
+    });
+    
+    // Handle input changes
+    input.addEventListener('blur', function() {
+      commitTweak(cell, input, displaySpan);
+    });
+    
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitTweak(cell, input, displaySpan);
+      } else if (e.key === 'Escape') {
+        // Cancel edit, restore previous value
+        input.value = cell.getAttribute('data-value');
+        displaySpan.style.display = 'inline';
+        input.style.display = 'none';
+      }
+    });
+  });
+  
+  function commitTweak(cell, input, displaySpan) {
+    var newValue = parseFloat(input.value) || 0;
+    var original = parseFloat(cell.getAttribute('data-original'));
+    
+    cell.setAttribute('data-value', newValue);
+    displaySpan.textContent = newValue;
+    displaySpan.style.display = 'inline';
+    input.style.display = 'none';
+    
+    // Mark as tweaked if different from original
+    if (newValue !== original) {
+      cell.classList.add('tweaked');
+    } else {
+      cell.classList.remove('tweaked');
+    }
+    
+    // Update the result for this row
+    updateRowResult(cell.closest('tr'));
+    
+    // Re-apply gradient colors
+    applyGradientColors();
+    updateResetButton();
+  }
+  
+  function updateRowResult(row) {
+    var valueCell = row.querySelector('.value-total-cell');
+    var costCell = row.querySelector('.cost-total-cell');
+    var resultCell = row.querySelector('.result-cell');
+    
+    if (!valueCell || !costCell || !resultCell) return;
+    
+    var value = parseFloat(valueCell.getAttribute('data-value')) || 0;
+    var cost = parseFloat(costCell.getAttribute('data-value')) || 0;
+    
+    var result = null;
+    if (cost > 0) {
+      result = value / cost;
+    }
+    
+    // Update result cell
+    if (result !== null) {
+      resultCell.setAttribute('data-value', result);
+      resultCell.innerHTML = '<strong>' + result.toFixed(2) + '</strong>';
+      row.setAttribute('data-result', result);
+    } else {
+      resultCell.setAttribute('data-value', '-999');
+      resultCell.innerHTML = '<span style="color:var(--muted);">—</span>';
+      row.setAttribute('data-result', '');
+    }
+    
+    // Mark result cell as tweaked if any input is tweaked
+    var hasTweak = valueCell.classList.contains('tweaked') || costCell.classList.contains('tweaked');
+    resultCell.classList.toggle('tweaked', hasTweak);
   }
 })();
 </script>

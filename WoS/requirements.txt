@@ -1,4 +1,14 @@
-Django>=3.2,<4.0
-djangorestframework
-gunicorn
-whitenoise
+# WoS - WSJF on Steroids
+# Python dependencies
+
+# Core framework
+Django>=5.0,<6.0
+
+# Production server
+gunicorn>=21.0
+
+# Static file serving
+whitenoise>=6.6
+
+# Optional: REST API support (if needed in future)
+# djangorestframework>=3.14
