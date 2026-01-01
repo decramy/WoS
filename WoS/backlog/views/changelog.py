@@ -29,7 +29,7 @@ def changelog(request):
     for line in changelog_content.split('\n'):
         line = line.rstrip()
         
-        # Version header: ## [1.0.0] - 2026-01-01
+        # Version headd', per: ## [1.0.0] - 2026-01-01
         if line.startswith('## ['):
             if current_version:
                 versions.append(current_version)

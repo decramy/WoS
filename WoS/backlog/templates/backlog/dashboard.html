@@ -18,6 +18,11 @@
 
 <!-- Summary Cards -->
 <div class="dashboard-summary">
+  <div class="summary-card summary-review">
+    <div class="summary-icon">👀</div>
+    <div class="summary-value">{{ summary.review_required }}</div>
+    <div class="summary-label">Need Review</div>
+  </div>
   <div class="summary-card summary-scoring">
     <div class="summary-icon">🎯</div>
     <div class="summary-value">{{ summary.needs_scoring }}</div>
@@ -33,16 +38,55 @@
     <div class="summary-value">{{ summary.rotting }}</div>
     <div class="summary-label">Rotting Stories</div>
   </div>
-  <div class="summary-card summary-review">
-    <div class="summary-icon">👀</div>
-    <div class="summary-value">{{ summary.review_required }}</div>
-    <div class="summary-label">Need Review</div>
+  <div class="summary-card summary-housekeeping">
+    <div class="summary-icon">🧹</div>
+    <div class="summary-value">{{ summary.housekeeping }}</div>
+    <div class="summary-label">Housekeeping</div>
   </div>
   <div class="summary-card summary-healthy">
     <div class="summary-icon">✅</div>
     <div class="summary-value">{{ summary.healthy }}</div>
     <div class="summary-label">Healthy</div>
   </div>
+</div>
+
+<!-- Review Required Section (FIRST - Most Important) -->
+<div class="dashboard-section">
+  <div class="section-header">
+    <h3>👀 Review Required</h3>
+    <span class="section-count">{{ summary.review_required }} stories</span>
+  </div>
+  <div class="section-hint">Stories that have been flagged for review by team members. Address these first!</div>
+  
+  {% if review_required %}
+  <table class="dashboard-table">
+    <thead>
+      <tr>
+        <th>Story</th>
+        <th>Epic</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in review_required %}
+      <tr>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
+        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td><span class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|title }}</span></td>
+        <td class="text-muted">{{ item.story.created_at|date:"M d, Y" }}</td>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="btn btn-small">Review →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state-small">
+    <span class="empty-icon">✅</span>
+    <span class="empty-text">No stories flagged for review!</span>
+  </div>
+  {% endif %}
 </div>
 
 <!-- Needs Scoring Section -->
@@ -182,43 +226,206 @@
   {% endif %}
 </div>
 
-<!-- Review Required Section -->
-<div class="dashboard-section">
+<!-- Housekeeping Section -->
+<div class="dashboard-section housekeeping-section">
   <div class="section-header">
-    <h3>👀 Review Required</h3>
-    <span class="section-count">{{ summary.review_required }} stories</span>
+    <h3>🧹 Housekeeping</h3>
+    <span class="section-count">{{ housekeeping.total_issues }} issues</span>
   </div>
-  <div class="section-hint">Stories that have been flagged for review by team members.</div>
+  <div class="section-hint">Data integrity issues and cleanup tasks. Some can be automatically fixed, others require manual attention.</div>
   
-  {% if review_required %}
-  <table class="dashboard-table">
-    <thead>
-      <tr>
-        <th>Story</th>
-        <th>Epic</th>
-        <th>Status</th>
-        <th>Created</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in review_required %}
-      <tr>
-        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
-        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
-        <td><span class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|title }}</span></td>
-        <td class="text-muted">{{ item.story.created_at|date:"M d, Y" }}</td>
-        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="btn btn-small">Review →</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  {% if housekeeping.issues %}
+  <div class="housekeeping-grid">
+    {% for issue in housekeeping.issues %}
+    <div class="housekeeping-card housekeeping-{{ issue.severity }}">
+      <div class="housekeeping-header">
+        <span class="housekeeping-icon">{{ issue.icon }}</span>
+        <span class="housekeeping-title">{{ issue.title }}</span>
+        <span class="housekeeping-count">{{ issue.count }}</span>
+      </div>
+      <div class="housekeeping-description">{{ issue.description }}</div>
+      
+      {% if issue.items %}
+      <div class="housekeeping-items">
+        {% for item in issue.items %}
+        <div class="housekeeping-item">
+          {% if issue.type == 'orphan_stories' %}
+            <span class="item-title">{{ item.title|truncatechars:40 }}</span>
+            <span class="item-meta">ID: {{ item.id }} | Epic ID: {{ item.epic_id }} (deleted)</span>
+          {% elif issue.type == 'empty_epics' %}
+            <a href="{% url 'backlog:epic_detail' item.id %}" class="item-link">{{ item.title|truncatechars:40 }}</a>
+          {% else %}
+            {{ item }}
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% if issue.count > 10 %}
+        <div class="housekeeping-more">... and {{ issue.count|add:"-10" }} more</div>
+        {% endif %}
+      </div>
+      {% endif %}
+      
+      {% if issue.action %}
+      <form method="post" class="housekeeping-action">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="{{ issue.action }}">
+        <button type="submit" class="btn btn-small btn-cleanup" onclick="return confirm('Are you sure you want to clean up {{ issue.count }} {{ issue.title|lower }}?');">
+          🧹 Clean Up
+        </button>
+      </form>
+      {% elif issue.type == 'orphan_stories' %}
+      <div class="housekeeping-action">
+        <span class="action-hint">⚠️ Requires manual reassignment to a new epic</span>
+      </div>
+      {% elif issue.type == 'empty_epics' %}
+      <div class="housekeeping-action">
+        <span class="action-hint">ℹ️ Consider adding stories or archiving these epics</span>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
   {% else %}
   <div class="empty-state-small">
-    <span class="empty-icon">✅</span>
-    <span class="empty-text">No stories flagged for review!</span>
+    <span class="empty-icon">✨</span>
+    <span class="empty-text">No housekeeping issues! Your data is clean.</span>
   </div>
   {% endif %}
+</div>
+
+<!-- Statistics Section -->
+<div class="dashboard-section statistics-section">
+  <div class="section-header">
+    <h3>📈 Statistics</h3>
+    <span class="section-count">Backlog Overview</span>
+  </div>
+  <div class="section-hint">Informational metrics about your backlog health and trends.</div>
+  
+  <div class="statistics-grid">
+    <!-- Overview Stats -->
+    <div class="stat-card stat-overview">
+      <div class="stat-header">
+        <span class="stat-icon">📦</span>
+        <span class="stat-title">Backlog Overview</span>
+      </div>
+      <div class="stat-content">
+        <div class="stat-row">
+          <span class="stat-label">Total Stories</span>
+          <span class="stat-value">{{ statistics.total_stories }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Active Stories</span>
+          <span class="stat-value">{{ statistics.active_stories }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Archived Stories</span>
+          <span class="stat-value text-muted">{{ statistics.archived_stories }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Total Epics</span>
+          <span class="stat-value">{{ statistics.total_epics }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Active Epics</span>
+          <span class="stat-value">{{ statistics.active_epics }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Archived Epics</span>
+          <span class="stat-value text-muted">{{ statistics.archived_epics }}</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Status Distribution -->
+    <div class="stat-card stat-status">
+      <div class="stat-header">
+        <span class="stat-icon">📊</span>
+        <span class="stat-title">Status Distribution</span>
+      </div>
+      <div class="stat-content">
+        {% for status, count in statistics.status_counts.items %}
+        <div class="stat-row">
+          <span class="stat-label"><span class="status-{{ status }}">{{ status|title }}</span></span>
+          <span class="stat-value">{{ count }}</span>
+        </div>
+        {% empty %}
+        <div class="stat-empty">No active stories</div>
+        {% endfor %}
+      </div>
+    </div>
+    
+    <!-- Biggest Epics -->
+    <div class="stat-card stat-epics">
+      <div class="stat-header">
+        <span class="stat-icon">🏆</span>
+        <span class="stat-title">Biggest Epics</span>
+      </div>
+      <div class="stat-content">
+        {% for item in statistics.biggest_epics %}
+        <div class="stat-row">
+          <span class="stat-label"><a href="{% url 'backlog:epic_detail' item.epic.id %}" class="stat-link">{{ item.epic.title|truncatechars:25 }}</a></span>
+          <span class="stat-value">{{ item.story_count }} stories</span>
+        </div>
+        {% empty %}
+        <div class="stat-empty">No epics with stories</div>
+        {% endfor %}
+      </div>
+    </div>
+    
+    <!-- Recently Completed -->
+    <div class="stat-card stat-completed">
+      <div class="stat-header">
+        <span class="stat-icon">✅</span>
+        <span class="stat-title">Recently Completed (30d)</span>
+      </div>
+      <div class="stat-content">
+        {% for story in statistics.recently_completed %}
+        <div class="stat-row">
+          <span class="stat-label"><a href="{% url 'backlog:story_detail' story.id %}" class="stat-link">{{ story.title|truncatechars:25 }}</a></span>
+          <span class="stat-value text-muted">{{ story.finished|date:"M d" }}</span>
+        </div>
+        {% empty %}
+        <div class="stat-empty">No completions in last 30 days</div>
+        {% endfor %}
+      </div>
+    </div>
+    
+    <!-- Oldest Open Stories -->
+    <div class="stat-card stat-oldest">
+      <div class="stat-header">
+        <span class="stat-icon">🕰️</span>
+        <span class="stat-title">Oldest Open Stories</span>
+      </div>
+      <div class="stat-content">
+        {% for story in statistics.oldest_open %}
+        <div class="stat-row">
+          <span class="stat-label"><a href="{% url 'backlog:story_detail' story.id %}" class="stat-link">{{ story.title|truncatechars:25 }}</a></span>
+          <span class="stat-value text-muted">{{ story.created_at|date:"M d, Y" }}</span>
+        </div>
+        {% empty %}
+        <div class="stat-empty">No open stories</div>
+        {% endfor %}
+      </div>
+    </div>
+    
+    <!-- Stories Blocking Others -->
+    <div class="stat-card stat-blocking">
+      <div class="stat-header">
+        <span class="stat-icon">🚧</span>
+        <span class="stat-title">Blocking Stories</span>
+      </div>
+      <div class="stat-content">
+        {% for item in statistics.blocking_stories %}
+        <div class="stat-row">
+          <span class="stat-label"><a href="{% url 'backlog:story_detail' item.story.id %}" class="stat-link">{{ item.story.title|truncatechars:25 }}</a></span>
+          <span class="stat-value">blocks {{ item.dependent_count }}</span>
+        </div>
+        {% empty %}
+        <div class="stat-empty">No blocking dependencies</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -266,6 +473,7 @@
 .summary-refinement .summary-value { color: #7c3aed; }
 .summary-rotting .summary-value { color: var(--warning); }
 .summary-review .summary-value { color: #0891b2; }
+.summary-housekeeping .summary-value { color: #64748b; }
 .summary-healthy .summary-value { color: var(--accent-2); }
 
 /* Dashboard Sections */
@@ -402,6 +610,228 @@
   .dashboard-table th,
   .dashboard-table td {
     padding: 8px;
+  }
+}
+
+/* Housekeeping Section */
+.housekeeping-section {
+  background: linear-gradient(135deg, var(--panel), rgba(100, 116, 139, 0.02));
+}
+
+.housekeeping-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.housekeeping-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.housekeeping-warning {
+  border-left: 3px solid var(--warning);
+}
+
+.housekeeping-info {
+  border-left: 3px solid var(--accent);
+}
+
+.housekeeping-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.housekeeping-icon {
+  font-size: 18px;
+}
+
+.housekeeping-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.housekeeping-count {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.housekeeping-description {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.housekeeping-items {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 12px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.housekeeping-item {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.housekeeping-item:last-child {
+  border-bottom: none;
+}
+
+.item-title {
+  font-weight: 500;
+}
+
+.item-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.item-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.item-link:hover {
+  text-decoration: underline;
+}
+
+.housekeeping-more {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  padding-top: 4px;
+}
+
+.housekeeping-action {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.btn-cleanup {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.btn-cleanup:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+
+.action-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 768px) {
+  .housekeeping-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Statistics Section */
+.statistics-section {
+  background: linear-gradient(135deg, var(--panel), rgba(59, 130, 246, 0.02));
+}
+
+.statistics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.stat-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-icon {
+  font-size: 18px;
+}
+
+.stat-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.stat-label {
+  color: var(--text);
+}
+
+.stat-value {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.stat-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.stat-link:hover {
+  text-decoration: underline;
+}
+
+.stat-empty {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  text-align: center;
+  padding: 8px;
+}
+
+.stat-overview { border-left: 3px solid var(--accent); }
+.stat-status { border-left: 3px solid #7c3aed; }
+.stat-epics { border-left: 3px solid #f59e0b; }
+.stat-completed { border-left: 3px solid var(--accent-2); }
+.stat-oldest { border-left: 3px solid #64748b; }
+.stat-blocking { border-left: 3px solid #ef4444; }
+
+@media (max-width: 768px) {
+  .statistics-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

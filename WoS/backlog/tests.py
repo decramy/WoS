@@ -1715,3 +1715,313 @@ class DashboardViewTests(BaseTestCase):
         if len(rotting) >= 2:
             # Most stale should come first
             self.assertGreaterEqual(rotting[0]['days'], rotting[-1]['days'])
+
+    def test_housekeeping_context_present(self):
+        """Test that housekeeping data is in dashboard context."""
+        response = self.client.get(reverse('backlog:dashboard'))
+        self.assertIn('housekeeping', response.context)
+        housekeeping = response.context['housekeeping']
+        self.assertIn('issues', housekeeping)
+        self.assertIn('total_issues', housekeeping)
+
+    def test_housekeeping_empty_epics_detected(self):
+        """Test that empty epics are detected in housekeeping."""
+        # Create an empty epic (no stories)
+        empty_epic = Epic.objects.create(
+            title="Empty Epic",
+            description="This epic has no stories"
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        housekeeping = response.context['housekeeping']
+        
+        # Find the empty_epics issue
+        empty_epic_issues = [i for i in housekeeping['issues'] if i['type'] == 'empty_epics']
+        self.assertEqual(len(empty_epic_issues), 1)
+        self.assertGreaterEqual(empty_epic_issues[0]['count'], 1)
+
+    def test_housekeeping_orphan_value_scores_cleanup(self):
+        """Test cleanup of orphaned value factor scores.
+        
+        Note: Since Django's CASCADE delete normally prevents orphans, we use
+        raw SQL to simulate database corruption/manual edits that could cause orphans.
+        """
+        from django.db import connection
+        
+        # Create a story and score it
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Story to Delete",
+            goal="Goal",
+            workitems="Work"
+        )
+        story_id = story.id
+        
+        # Score the story
+        score = story.scores.first()
+        score.answer = self.vf_answer_5
+        score.save()
+        
+        # Verify score exists
+        self.assertTrue(StoryValueFactorScore.objects.filter(story_id=story_id).exists())
+        
+        # Use raw SQL to delete story without cascade (simulate DB corruption)
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA foreign_keys=OFF")
+            cursor.execute("DELETE FROM backlog_story WHERE id = %s", [story_id])
+            cursor.execute("PRAGMA foreign_keys=ON")
+        
+        # Verify orphan score exists
+        orphan_count = StoryValueFactorScore.objects.filter(story_id=story_id).count()
+        self.assertGreater(orphan_count, 0)
+        
+        # Perform cleanup
+        response = self.client.post(
+            reverse('backlog:dashboard'),
+            {'action': 'cleanup_orphan_value_scores'}
+        )
+        self.assertRedirects(response, reverse('backlog:dashboard'))
+        
+        # Verify orphan scores are cleaned up
+        self.assertEqual(
+            StoryValueFactorScore.objects.filter(story_id=story_id).count(),
+            0
+        )
+        
+        # Clean up any remaining orphan cost scores to avoid teardown issues
+        StoryCostFactorScore.objects.filter(story_id=story_id).delete()
+
+    def test_housekeeping_orphan_cost_scores_cleanup(self):
+        """Test cleanup of orphaned cost factor scores.
+        
+        Note: Since Django's CASCADE delete normally prevents orphans, we use
+        raw SQL to simulate database corruption/manual edits that could cause orphans.
+        """
+        from django.db import connection
+        
+        # Create a story and score it
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Story to Delete",
+            goal="Goal",
+            workitems="Work"
+        )
+        story_id = story.id
+        
+        # Score the story
+        score = story.cost_scores.first()
+        score.answer = self.cf_answer_2
+        score.save()
+        
+        # Verify score exists
+        self.assertTrue(StoryCostFactorScore.objects.filter(story_id=story_id).exists())
+        
+        # Use raw SQL to delete story without cascade (simulate DB corruption)
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA foreign_keys=OFF")
+            cursor.execute("DELETE FROM backlog_story WHERE id = %s", [story_id])
+            cursor.execute("PRAGMA foreign_keys=ON")
+        
+        # Verify orphan score exists
+        orphan_count = StoryCostFactorScore.objects.filter(story_id=story_id).count()
+        self.assertGreater(orphan_count, 0)
+        
+        # Perform cleanup
+        response = self.client.post(
+            reverse('backlog:dashboard'),
+            {'action': 'cleanup_orphan_cost_scores'}
+        )
+        self.assertRedirects(response, reverse('backlog:dashboard'))
+        
+        # Verify orphan scores are cleaned up
+        self.assertEqual(
+            StoryCostFactorScore.objects.filter(story_id=story_id).count(),
+            0
+        )
+        
+        # Clean up any remaining orphan value scores to avoid teardown issues
+        StoryValueFactorScore.objects.filter(story_id=story_id).delete()
+
+    def test_housekeeping_orphan_dependencies_cleanup(self):
+        """Test cleanup of orphaned dependencies.
+        
+        Note: Since Django's CASCADE delete normally prevents orphans, we use
+        raw SQL to simulate database corruption/manual edits that could cause orphans.
+        """
+        from django.db import connection
+        
+        # Create two stories
+        story1 = Story.objects.create(
+            epic=self.epic,
+            title="Story 1",
+            goal="Goal",
+            workitems="Work"
+        )
+        story2 = Story.objects.create(
+            epic=self.epic,
+            title="Story 2",
+            goal="Goal",
+            workitems="Work"
+        )
+        story2_id = story2.id
+        
+        # Create a dependency
+        dep = StoryDependency.objects.create(
+            story=story1,
+            depends_on=story2
+        )
+        
+        # Use raw SQL to delete story2 without cascade (simulate DB corruption)
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA foreign_keys=OFF")
+            cursor.execute("DELETE FROM backlog_story WHERE id = %s", [story2_id])
+            cursor.execute("PRAGMA foreign_keys=ON")
+        
+        # Verify orphan dependency exists
+        self.assertTrue(StoryDependency.objects.filter(depends_on_id=story2_id).exists())
+        
+        # Perform cleanup
+        response = self.client.post(
+            reverse('backlog:dashboard'),
+            {'action': 'cleanup_orphan_dependencies'}
+        )
+        self.assertRedirects(response, reverse('backlog:dashboard'))
+        
+        # Verify orphan dependency is cleaned up
+        self.assertFalse(StoryDependency.objects.filter(depends_on_id=story2_id).exists())
+        
+        # Clean up any remaining orphan scores to avoid teardown issues
+        StoryValueFactorScore.objects.filter(story_id=story2_id).delete()
+        StoryCostFactorScore.objects.filter(story_id=story2_id).delete()
+
+    def test_housekeeping_orphan_history_cleanup(self):
+        """Test cleanup of orphaned history entries.
+        
+        Note: Since Django's CASCADE delete normally prevents orphans, we use
+        raw SQL to simulate database corruption/manual edits that could cause orphans.
+        """
+        from django.db import connection
+        
+        # Create a story
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Story to Delete",
+            goal="Goal",
+            workitems="Work"
+        )
+        story_id = story.id
+        
+        # Create history entry
+        StoryHistory.objects.create(
+            story=story,
+            field_name='title',
+            old_value='Old Title',
+            new_value='Story to Delete'
+        )
+        
+        # Verify history exists
+        self.assertTrue(StoryHistory.objects.filter(story_id=story_id).exists())
+        
+        # Use raw SQL to delete story without cascade (simulate DB corruption)
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA foreign_keys=OFF")
+            cursor.execute("DELETE FROM backlog_story WHERE id = %s", [story_id])
+            cursor.execute("PRAGMA foreign_keys=ON")
+        
+        # Verify orphan history exists
+        self.assertTrue(StoryHistory.objects.filter(story_id=story_id).exists())
+        
+        # Perform cleanup
+        response = self.client.post(
+            reverse('backlog:dashboard'),
+            {'action': 'cleanup_orphan_history'}
+        )
+        self.assertRedirects(response, reverse('backlog:dashboard'))
+        
+        # Verify orphan history is cleaned up
+        self.assertFalse(StoryHistory.objects.filter(story_id=story_id).exists())
+        
+        # Clean up any remaining orphan scores to avoid teardown issues
+        StoryValueFactorScore.objects.filter(story_id=story_id).delete()
+        StoryCostFactorScore.objects.filter(story_id=story_id).delete()
+
+    def test_housekeeping_summary_count(self):
+        """Test that housekeeping count appears in summary."""
+        response = self.client.get(reverse('backlog:dashboard'))
+        summary = response.context['summary']
+        self.assertIn('housekeeping', summary)
+
+    def test_statistics_context_present(self):
+        """Test that statistics data is in dashboard context."""
+        response = self.client.get(reverse('backlog:dashboard'))
+        self.assertIn('statistics', response.context)
+        statistics = response.context['statistics']
+        
+        # Check all expected keys
+        self.assertIn('total_stories', statistics)
+        self.assertIn('active_stories', statistics)
+        self.assertIn('archived_stories', statistics)
+        self.assertIn('total_epics', statistics)
+        self.assertIn('active_epics', statistics)
+        self.assertIn('archived_epics', statistics)
+        self.assertIn('status_counts', statistics)
+        self.assertIn('biggest_epics', statistics)
+        self.assertIn('recently_completed', statistics)
+        self.assertIn('oldest_open', statistics)
+        self.assertIn('stories_with_deps', statistics)
+        self.assertIn('blocking_stories', statistics)
+
+    def test_statistics_counts_correct(self):
+        """Test that statistics counts are accurate."""
+        # Create some additional stories
+        story1 = Story.objects.create(
+            epic=self.epic,
+            title="Active Story",
+            goal="Goal",
+            workitems="Work"
+        )
+        story2 = Story.objects.create(
+            epic=self.epic,
+            title="Archived Story",
+            archived=True
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        statistics = response.context['statistics']
+        
+        # Check that counts reflect the data
+        self.assertEqual(statistics['archived_stories'], 1)
+        self.assertGreaterEqual(statistics['active_stories'], 1)
+        self.assertGreaterEqual(statistics['total_epics'], 1)
+
+    def test_statistics_biggest_epics(self):
+        """Test that biggest epics are correctly identified."""
+        # Create stories in our test epic
+        for i in range(3):
+            Story.objects.create(
+                epic=self.epic,
+                title=f"Story {i}",
+                goal="Goal",
+                workitems="Work"
+            )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        statistics = response.context['statistics']
+        
+        # Our epic should be in the biggest epics list
+        epic_ids = [item['epic'].id for item in statistics['biggest_epics']]
+        self.assertIn(self.epic.id, epic_ids)
+
+    def test_review_required_shown_first(self):
+        """Test that review required section appears before other sections in template."""
+        response = self.client.get(reverse('backlog:dashboard'))
+        content = response.content.decode()
+        
+        # Find positions of section headers
+        review_pos = content.find('👀 Review Required')
+        scoring_pos = content.find('🎯 Stories Needing Scoring')
+        
+        # Review should appear before scoring
+        self.assertTrue(review_pos > 0)
+        self.assertTrue(scoring_pos > 0)
+        self.assertLess(review_pos, scoring_pos)

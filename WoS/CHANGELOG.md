@@ -5,6 +5,37 @@ All notable changes to WoS (WSJF on Steroids) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-01-01
+
+### Added
+- **Statistics Dashboard Section**: New informational metrics about backlog health
+  - Backlog Overview: Total/active/archived stories and epics counts
+  - Status Distribution: Breakdown of stories by status
+  - Biggest Epics: Top 5 epics by active story count
+  - Recently Completed: Stories completed in the last 30 days
+  - Oldest Open Stories: Oldest open items in the backlog
+  - Blocking Stories: Stories that block other work (most dependents)
+- Added 4 new tests for statistics functionality (120 total tests)
+
+### Changed
+- **Review Required moved to first position**: Now the first dashboard section for priority visibility
+- Reordered dashboard summary cards to put Review first
+
+## [1.1.0] - 2026-01-01
+
+### Added
+- **Housekeeping Dashboard Section**: New data integrity monitoring and cleanup tools
+  - Orphaned Stories: Stories whose epic has been deleted
+  - Orphaned Value/Cost Scores: Scores for deleted stories (with auto-cleanup)
+  - Orphaned Dependencies: Dependencies referencing deleted stories (with auto-cleanup)
+  - Orphaned History: History entries for deleted stories (with auto-cleanup)
+  - Stale Value/Cost Scores: Scores for deleted factors (with auto-cleanup)
+  - Empty Epics: Epics without any stories (informational)
+  - Duplicate Dependencies: Same dependency recorded multiple times
+  - Summary count in dashboard header
+  - One-click cleanup buttons for fixable issues
+- Added 7 new tests for housekeeping functionality (116 total tests)
+
 ## [1.0.0] - 2026-01-01
 
 ### Added
