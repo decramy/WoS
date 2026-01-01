@@ -11,7 +11,7 @@
       <a class="btn" href="{% url 'backlog:stories' %}">← Active Stories</a>
     {% else %}
       <a class="btn" href="{% url 'backlog:stories' %}?archived=1">📦 View Archived</a>
-      <a class="btn" href="{% url 'backlog:create_story_refine' %}">➕ Create Story</a>
+      <a class="btn" href="{% url 'backlog:story_create' %}">➕ Create Story</a>
     {% endif %}
   </div>
 </div>
@@ -82,7 +82,7 @@
     {% for item in stories %}
       <tr>
         <td style="white-space:nowrap;">
-          <a href="{% url 'backlog:refine_story' item.story.id %}" title="Refine story">🔧</a>
+          <a href="{% url 'backlog:story_detail' item.story.id %}" title="Edit story">🔧</a>
           {% if show_archived %}
             <form method="post" action="" style="display:inline;">
               {% csrf_token %}
@@ -112,7 +112,7 @@
           </form>
         </td>
         <td style="color:var(--muted);">{{ item.story.epic.title }}</td>
-        <td><a href="{% url 'backlog:refine_story' item.story.id %}" class="table-link">{% if item.story.review_required %}🚩 {% endif %}{{ item.story.title }}</a></td>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{% if item.story.review_required %}🚩 {% endif %}{{ item.story.title }}</a></td>
         <td><strong class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|upper }}</strong></td>
         <td style="text-align:center;">{% if item.details_complete %}<span style="color:var(--accent-2);" title="✓ Details complete">✅</span>{% else %}<span style="color:var(--danger);" title="✗ Missing: title, goal or workitems">⚠️</span>{% endif %}</td>
         <td style="text-align:center;">{% if item.scores_complete %}<span style="color:var(--accent-2);" title="✓ All scores defined">✅</span>{% else %}<span style="color:var(--danger);" title="✗ Some scores undefined">⚠️</span>{% endif %}</td>

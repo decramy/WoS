@@ -82,10 +82,10 @@
     {% for r in rows %}
       <tr data-result="{% if r.result is not None %}{{ r.result }}{% endif %}">
         <td>
-          <a href="{% url 'backlog:edit_epic' r.story.epic.id %}" class="table-link">{{ r.story.epic.title|truncatechars:20 }}</a>
+          <a href="{% url 'backlog:epic_detail' r.story.epic.id %}" class="table-link">{{ r.story.epic.title|truncatechars:20 }}</a>
         </td>
         <td>
-          <a href="{% url 'backlog:refine_story' r.story.id %}" class="table-link">{{ r.story.title|truncatechars:30 }}</a>
+          <a href="{% url 'backlog:story_detail' r.story.id %}" class="table-link">{{ r.story.title|truncatechars:30 }}</a>
         </td>
         <td class="status-{{ r.story.computed_status }}" data-value="{{ r.story.computed_status }}">
           {{ r.story.computed_status|upper }}

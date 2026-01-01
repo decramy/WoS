@@ -1,0 +1,155 @@
+{% extends 'backlog/base.html' %}
+{% load static %}
+
+{% block title %}Changelog - WoS{% endblock %}
+
+{% block content %}
+<div class="changelog-container">
+    <h1>📋 Changelog</h1>
+    <p class="changelog-intro">All notable changes to WoS (WSJF on Steroids) are documented here.</p>
+    
+    {% for version in versions %}
+    <div class="version-block">
+        <h2 class="version-header">
+            <span class="version-number">v{{ version.version }}</span>
+            <span class="version-date">{{ version.date }}</span>
+        </h2>
+        
+        {% for section in version.sections %}
+        <div class="changelog-section">
+            <h3 class="section-header {% if section.name == 'Added' %}section-added{% elif section.name == 'Changed' %}section-changed{% elif section.name == 'Fixed' %}section-fixed{% elif section.name == 'Removed' %}section-removed{% endif %}">
+                {% if section.name == 'Added' %}✨{% elif section.name == 'Changed' %}🔄{% elif section.name == 'Fixed' %}🐛{% elif section.name == 'Removed' %}🗑️{% else %}📝{% endif %}
+                {{ section.name }}
+            </h3>
+            <ul class="changelog-items">
+                {% for item in section.items %}
+                <li>
+                    {% if item.title %}
+                    <strong>{{ item.title }}</strong>: {{ item.description }}
+                    {% else %}
+                    {{ item.description }}
+                    {% endif %}
+                    {% if item.subitems %}
+                    <ul class="changelog-subitems">
+                        {% for subitem in item.subitems %}
+                        <li>{{ subitem }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+    {% empty %}
+    <p>No changelog entries found.</p>
+    {% endfor %}
+</div>
+
+<style>
+.changelog-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.changelog-intro {
+    color: var(--text-muted, #666);
+    margin-bottom: 30px;
+    font-style: italic;
+}
+
+.version-block {
+    margin-bottom: 40px;
+    border-left: 4px solid var(--primary-color, #007bff);
+    padding-left: 20px;
+}
+
+.version-header {
+    display: flex;
+    align-items: baseline;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.version-number {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: var(--primary-color, #007bff);
+}
+
+.version-date {
+    font-size: 0.9em;
+    color: var(--text-muted, #666);
+    font-weight: normal;
+}
+
+.changelog-section {
+    margin-bottom: 20px;
+}
+
+.section-header {
+    font-size: 1.1em;
+    margin-bottom: 10px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.section-added {
+    background-color: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+}
+
+.section-changed {
+    background-color: rgba(0, 123, 255, 0.1);
+    color: #007bff;
+}
+
+.section-fixed {
+    background-color: rgba(255, 193, 7, 0.1);
+    color: #d39e00;
+}
+
+.section-removed {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+}
+
+.changelog-items {
+    list-style-type: none;
+    padding-left: 10px;
+}
+
+.changelog-items > li {
+    margin-bottom: 10px;
+    padding-left: 20px;
+    position: relative;
+}
+
+.changelog-items > li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--primary-color, #007bff);
+}
+
+.changelog-subitems {
+    list-style-type: none;
+    padding-left: 20px;
+    margin-top: 5px;
+}
+
+.changelog-subitems li {
+    margin-bottom: 3px;
+    color: var(--text-muted, #666);
+    font-size: 0.95em;
+}
+
+.changelog-subitems li::before {
+    content: "◦";
+    margin-right: 8px;
+}
+</style>
+{% endblock %}

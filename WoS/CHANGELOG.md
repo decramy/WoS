@@ -1,0 +1,123 @@
+# Changelog
+
+All notable changes to WoS (WSJF on Steroids) will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2026-01-01
+
+### Added
+- **Views modularization**: Split monolithic `views.py` (1535 lines) into focused modules:
+  - `views/helpers.py` - Shared utility functions
+  - `views/dashboard.py` - Dashboard view
+  - `views/epics.py` - Epic CRUD operations
+  - `views/stories.py` - Story management
+  - `views/report.py` - WSJF scoring report
+  - `views/kanban.py` - Kanban board
+  - `views/wbs.py` - Work Breakdown Structure
+  - `views/health.py` - Health check endpoint
+
+### Changed
+- Improved code organization for better maintainability
+
+## [0.9.0] - 2026-01-01
+
+### Fixed
+- **Undefined vs Zero Score distinction**: Scores now properly distinguish between "undefined" (not yet scored) and an explicit score of 0
+  - Made `answer` field nullable in `StoryValueFactorScore` and `StoryCostFactorScore`
+  - `answer=None` means undefined/not scored
+  - `answer` with `score=0` is a valid explicit score
+  - Dashboard correctly detects stories needing scoring
+  - Updated signal to create scores with `answer=None` for new stories
+
+## [0.8.0] - 2026-01-01
+
+### Added
+- **Dashboard feature**: New dashboard showing stories that need attention
+  - Needs Scoring: Stories with missing or undefined factor scores
+  - Needs Refinement: Stories in 'idea' status (missing goal/workitems)
+  - Rotting Stories: Stories stuck in started/planned/blocked for too long
+  - Review Required: Stories flagged for review
+  - Summary counts and health metrics
+  - Configurable rotting thresholds (14 days started, 30 days planned, 7 days blocked)
+- Added 15 new tests for dashboard functionality
+
+## [0.7.0] - 2026-01-01
+
+### Changed
+- **URL restructuring**: Consistent RESTful URL patterns
+  - `/backlog/` → redirects to dashboard
+  - `/backlog/dashboard/` → Dashboard
+  - `/backlog/epics/` → Epic list
+  - `/backlog/epic/<id>/` → Epic detail
+  - `/backlog/stories/` → Story list  
+  - `/backlog/story/<id>/` → Story detail
+  - `/backlog/report/` → WSJF report
+  - `/backlog/kanban/` → Kanban board
+  - `/backlog/wbs/` → Work Breakdown Structure
+  - `/backlog/health/` → Health check
+
+## [0.6.0] - 2025-12-31
+
+### Added
+- **Code documentation**: Comprehensive docstrings and comments throughout codebase
+- **README improvements**: Updated with project overview, features, installation, and usage
+- Prepared codebase for open-source publication
+
+## [0.5.0] - 2025-12-31
+
+### Added
+- **Detailed tooltips**: Hover tooltips on report scores showing factor breakdown
+  - Each section score shows individual factor scores with descriptions
+  - Total value/cost shows section breakdown
+  - Result shows calculation formula
+
+## [0.4.0] - 2025-12-31
+
+### Changed
+- **Score calculation update**: Changed from sum of all scores to sum of section averages
+  - Value = sum of (average score per value section)
+  - Cost = sum of (average score per cost section)
+  - Result = Value / Cost
+  - This gives equal weight to each section regardless of factor count
+
+## [0.3.0] - 2025-12-31
+
+### Added
+- **Tweak mode**: Temporary score adjustments in the report view
+  - Allows "what-if" analysis without persisting changes
+  - Reset button to restore original scores
+  - Visual indication when tweaks are active
+
+## [0.2.0] - 2025-12-30
+
+### Added
+- **Comprehensive test suite**: 94 regression tests covering:
+  - Model creation and relationships
+  - `computed_status` property logic
+  - Epic and Story CRUD operations
+  - Archiving functionality with cascade
+  - History tracking
+  - Kanban board moves
+  - Report calculations
+  - WBS dependencies
+  - Story refinement
+
+## [0.1.0] - 2025-12-22
+
+### Added
+- Initial release of WoS (WSJF on Steroids)
+- **Epic management**: Create, edit, archive epics
+- **Story management**: Full story lifecycle with refinement
+- **WSJF scoring**: Value and Cost factors with configurable sections
+- **Kanban board**: Visual workflow with drag-and-drop
+- **Report view**: Priority scoring with filtering
+- **WBS view**: Work Breakdown Structure with dependencies
+- **Story dependencies**: Link stories with depends-on relationships
+- **Story history**: Track all changes to stories
+- **Archive/unarchive**: Soft delete for epics and stories
+- **Review flag**: Mark stories requiring review
+- **Health endpoint**: Container orchestration health check
+- **Dark/light themes**: CSS theme support
+- **Docker support**: Dockerfile and docker-compose configuration

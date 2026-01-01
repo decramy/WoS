@@ -5,7 +5,7 @@
 <div class="page-head">
 	<h2>📋 Kanban Board</h2>
 	<div class="page-actions">
-		<a class="btn" href="{% url 'backlog:create_story_refine' %}">+ Create Story</a>
+		<a class="btn" href="{% url 'backlog:story_create' %}">+ Create Story</a>
 	</div>
 </div>
 
@@ -63,7 +63,7 @@
 		<div class="kanban-drop" data-target="backlog">
 			{% for card in columns.backlog %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
-					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
 					<div class="meta">{{ card.story.epic.title }}</div>
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>
@@ -75,7 +75,7 @@
 		<div class="kanban-drop" data-target="planned">
 			{% for card in columns.planned %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
-					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
 					<div class="meta">{{ card.story.epic.title }}</div>
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>
@@ -87,7 +87,7 @@
 		<div class="kanban-drop" data-target="doing">
 			{% for card in columns.doing %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
-					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
 					<div class="meta">{{ card.story.epic.title }}</div>
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>
@@ -99,7 +99,7 @@
 		<div class="kanban-drop" data-target="blocked">
 			{% for card in columns.blocked %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
-					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
 					<div class="meta">{{ card.story.epic.title }}</div>
 					<div class="meta" style="color:var(--danger)">{{ card.story.blocked|truncatechars:50 }}</div>
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
@@ -112,7 +112,7 @@
 		<div class="kanban-drop" data-target="done">
 			{% for card in columns.done %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
-					<div class="title"><a href="{% url 'backlog:refine_story' card.story.id %}">{{ card.story.title }}</a></div>
+					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
 					<div class="meta">{{ card.story.epic.title }}</div>
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>

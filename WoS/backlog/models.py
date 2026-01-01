@@ -169,10 +169,14 @@ class StoryValueFactorScore(models.Model):
     Constraints:
     - The answer must belong to the specified valuefactor
     - Each story can have only one score per valuefactor
+    - answer=None means "undefined" (not yet scored)
     """
     story = models.ForeignKey(Story, related_name="scores", on_delete=models.CASCADE)
     valuefactor = models.ForeignKey(ValueFactor, related_name="scores", on_delete=models.CASCADE)
-    answer = models.ForeignKey(ValueFactorAnswer, related_name="+", on_delete=models.PROTECT)
+    answer = models.ForeignKey(
+        ValueFactorAnswer, related_name="+", on_delete=models.PROTECT,
+        null=True, blank=True, help_text="None means undefined/not yet scored"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -249,10 +253,14 @@ class StoryCostFactorScore(models.Model):
     Constraints:
     - The answer must belong to the specified costfactor
     - Each story can have only one score per costfactor
+    - answer=None means "undefined" (not yet scored)
     """
     story = models.ForeignKey(Story, related_name="cost_scores", on_delete=models.CASCADE)
     costfactor = models.ForeignKey(CostFactor, related_name="scores", on_delete=models.CASCADE)
-    answer = models.ForeignKey(CostFactorAnswer, related_name="+", on_delete=models.PROTECT)
+    answer = models.ForeignKey(
+        CostFactorAnswer, related_name="+", on_delete=models.PROTECT,
+        null=True, blank=True, help_text="None means undefined/not yet scored"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -274,42 +282,29 @@ class StoryCostFactorScore(models.Model):
 # =============================================================================
 
 
-def _get_or_create_zero_answer(vf: ValueFactor) -> ValueFactorAnswer:
-    """Get or create a zero-score answer for a value factor."""
-    ans = vf.answers.filter(score=0).first()
-    if ans:
-        return ans
-    return ValueFactorAnswer.objects.create(valuefactor=vf, score=0, description="Default 0")
-
-
-def _get_or_create_zero_answer_cf(cf: CostFactor) -> CostFactorAnswer:
-    """Get or create a zero-score answer for a cost factor."""
-    ans = cf.answers.filter(score=0).first()
-    if ans:
-        return ans
-    return CostFactorAnswer.objects.create(costfactor=cf, score=0, description="Default 0")
-
-
 @receiver(post_save, sender=Story)
 def ensure_scores_for_story(sender, instance: Story, created, **kwargs):
-    """Signal handler to create default scores when a Story is created."""
+    """Signal handler to create score records when a Story is created.
+    
+    Creates StoryValueFactorScore and StoryCostFactorScore records for each
+    factor, with answer=None (undefined). This ensures all factors are tracked
+    while clearly distinguishing "not yet scored" from an explicit score of 0.
+    """
     if not created:
         return
-    # For each ValueFactor create a StoryValueFactorScore using the 0 answer
+    # For each ValueFactor create a StoryValueFactorScore with answer=None (undefined)
     for vf in ValueFactor.objects.all():
-        zero_ans = _get_or_create_zero_answer(vf)
         StoryValueFactorScore.objects.get_or_create(
             story=instance,
             valuefactor=vf,
-            defaults={"answer": zero_ans},
+            defaults={"answer": None},
         )
-    # For each CostFactor create a StoryCostFactorScore using the 0 answer
+    # For each CostFactor create a StoryCostFactorScore with answer=None (undefined)
     for cf in CostFactor.objects.all():
-        zero_ans = _get_or_create_zero_answer_cf(cf)
         StoryCostFactorScore.objects.get_or_create(
             story=instance,
             costfactor=cf,
-            defaults={"answer": zero_ans},
+            defaults={"answer": None},
         )
 
 

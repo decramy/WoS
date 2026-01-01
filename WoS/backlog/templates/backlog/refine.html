@@ -256,7 +256,7 @@
         {% for dep in dependents %}
           <div class="dependency-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
             <span style="flex:1;">
-              <a href="{% url 'backlog:refine_story' dep.story.id %}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ dep.story.title }}</a>
+              <a href="{% url 'backlog:story_detail' dep.story.id %}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ dep.story.title }}</a>
               <span style="color:var(--muted);font-size:12px;margin-left:8px;">{{ dep.story.epic.title }}</span>
               <span class="status-{{ dep.story.computed_status }}" style="font-size:11px;margin-left:8px;text-transform:uppercase;">{{ dep.story.computed_status }}</span>
             </span>

@@ -389,13 +389,13 @@ class EpicViewTests(BaseTestCase):
 
     def test_overview_page_loads(self):
         """Test overview page loads successfully."""
-        response = self.client.get(reverse('backlog:index'))
+        response = self.client.get(reverse('backlog:epics'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Epic")
 
     def test_overview_create_epic(self):
         """Test creating an epic via overview POST."""
-        response = self.client.post(reverse('backlog:index'), {
+        response = self.client.post(reverse('backlog:epics'), {
             'action': 'create_epic',
             'title': 'New Epic',
             'description': 'New Description'
@@ -405,7 +405,7 @@ class EpicViewTests(BaseTestCase):
 
     def test_overview_edit_epic(self):
         """Test editing an epic via overview POST."""
-        response = self.client.post(reverse('backlog:index'), {
+        response = self.client.post(reverse('backlog:epics'), {
             'action': 'edit_epic',
             'epic_id': self.epic.pk,
             'title': 'Updated Epic',
@@ -417,7 +417,7 @@ class EpicViewTests(BaseTestCase):
 
     def test_overview_delete_epic(self):
         """Test deleting an epic via overview POST."""
-        response = self.client.post(reverse('backlog:index'), {
+        response = self.client.post(reverse('backlog:epics'), {
             'action': 'delete_epic',
             'epic_id': self.epic.pk
         })
@@ -428,7 +428,7 @@ class EpicViewTests(BaseTestCase):
         """Test archiving an epic via overview POST."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
         
-        response = self.client.post(reverse('backlog:index'), {
+        response = self.client.post(reverse('backlog:epics'), {
             'action': 'archive_epic',
             'epic_id': self.epic.pk
         })
@@ -443,7 +443,7 @@ class EpicViewTests(BaseTestCase):
         self.epic.archived = True
         self.epic.save()
         
-        response = self.client.post(reverse('backlog:index') + '?archived=1', {
+        response = self.client.post(reverse('backlog:epics') + '?archived=1', {
             'action': 'unarchive_epic',
             'epic_id': self.epic.pk
         })
@@ -461,7 +461,7 @@ class EpicViewTests(BaseTestCase):
         story.save()
         
         # Unarchive the epic
-        response = self.client.post(reverse('backlog:index') + '?archived=1', {
+        response = self.client.post(reverse('backlog:epics') + '?archived=1', {
             'action': 'unarchive_epic',
             'epic_id': self.epic.pk
         })
@@ -491,7 +491,7 @@ class EpicViewTests(BaseTestCase):
             started=timezone.now()
         )
         
-        response = self.client.get(reverse('backlog:index'))
+        response = self.client.get(reverse('backlog:epics'))
         self.assertEqual(response.status_code, 200)
         
         # Find the epic in context and check unfinished_count
@@ -515,7 +515,7 @@ class EpicViewTests(BaseTestCase):
             finished=timezone.now()
         )
         
-        response = self.client.get(reverse('backlog:index'))
+        response = self.client.get(reverse('backlog:epics'))
         epics_data = response.context['epics']
         test_epic_data = next((e for e in epics_data if e['epic'].pk == self.epic.pk), None)
         
@@ -535,7 +535,7 @@ class EpicViewTests(BaseTestCase):
             title="Active Idea"
         )
         
-        response = self.client.get(reverse('backlog:index'))
+        response = self.client.get(reverse('backlog:epics'))
         epics_data = response.context['epics']
         test_epic_data = next((e for e in epics_data if e['epic'].pk == self.epic.pk), None)
         
@@ -550,7 +550,7 @@ class EpicViewTests(BaseTestCase):
         active_epic = Epic.objects.create(title="Active Epic XYZ123")
         
         # Non-archived view - should show active epic, not archived one
-        response = self.client.get(reverse('backlog:index'))
+        response = self.client.get(reverse('backlog:epics'))
         # The archived epic should not appear in the main list
         # Check for the epic title in the epics list context
         epics_in_response = [e['epic'].title for e in response.context['epics']]
@@ -558,19 +558,19 @@ class EpicViewTests(BaseTestCase):
         self.assertIn("Active Epic XYZ123", epics_in_response)
         
         # Archived view - should show archived epic, not active one
-        response = self.client.get(reverse('backlog:index') + '?archived=1')
+        response = self.client.get(reverse('backlog:epics') + '?archived=1')
         epics_in_response = [e['epic'].title for e in response.context['epics']]
         self.assertIn("Test Epic", epics_in_response)
         self.assertNotIn("Active Epic XYZ123", epics_in_response)
 
     def test_create_epic_page(self):
         """Test create epic page loads."""
-        response = self.client.get(reverse('backlog:create_epic'))
+        response = self.client.get(reverse('backlog:epic_create'))
         self.assertEqual(response.status_code, 200)
 
     def test_create_epic_post(self):
         """Test creating epic via dedicated page."""
-        response = self.client.post(reverse('backlog:create_epic'), {
+        response = self.client.post(reverse('backlog:epic_create'), {
             'title': 'Page Epic',
             'description': 'Created from page'
         })
@@ -579,7 +579,7 @@ class EpicViewTests(BaseTestCase):
 
     def test_edit_epic_page(self):
         """Test edit epic page loads."""
-        response = self.client.get(reverse('backlog:edit_epic', args=[self.epic.pk]))
+        response = self.client.get(reverse('backlog:epic_detail', args=[self.epic.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Epic")
 
@@ -674,7 +674,7 @@ class RefineStoryTests(BaseTestCase):
     def test_refine_page_loads(self):
         """Test refine page loads for existing story."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
-        response = self.client.get(reverse('backlog:refine_story', args=[story.pk]))
+        response = self.client.get(reverse('backlog:story_detail', args=[story.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Story")
 
@@ -682,7 +682,7 @@ class RefineStoryTests(BaseTestCase):
         """Test saving story title - critical regression test (was broken before)."""
         story = Story.objects.create(epic=self.epic, title="Original Title")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Updated Title',
             'epic_id': self.epic.pk,
             'goal': 'Test Goal',
@@ -697,7 +697,7 @@ class RefineStoryTests(BaseTestCase):
         """Test saving story goal."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
             'epic_id': self.epic.pk,
             'goal': 'New Goal',
@@ -712,7 +712,7 @@ class RefineStoryTests(BaseTestCase):
         """Test saving story workitems."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
             'epic_id': self.epic.pk,
             'goal': '',
@@ -728,7 +728,7 @@ class RefineStoryTests(BaseTestCase):
         story = Story.objects.create(epic=self.epic, title="Test Story")
         epic2 = Epic.objects.create(title="Epic 2")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
             'epic_id': epic2.pk,
             'goal': '',
@@ -743,7 +743,7 @@ class RefineStoryTests(BaseTestCase):
         """Test setting blocked field."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
             'epic_id': self.epic.pk,
             'goal': '',
@@ -763,7 +763,7 @@ class RefineStoryTests(BaseTestCase):
             blocked="Was blocked"
         )
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'remove_blocked': '1',
         })
         self.assertEqual(response.status_code, 302)
@@ -774,7 +774,7 @@ class RefineStoryTests(BaseTestCase):
         """Test archiving story from refine page."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'action': 'archive_story',
         })
         self.assertEqual(response.status_code, 302)
@@ -785,7 +785,7 @@ class RefineStoryTests(BaseTestCase):
         """Test toggling review_required from refine page."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'action': 'toggle_review',
         })
         self.assertEqual(response.status_code, 302)
@@ -796,7 +796,7 @@ class RefineStoryTests(BaseTestCase):
         """Test that changes are tracked in history."""
         story = Story.objects.create(epic=self.epic, title="Original Title")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'New Title',
             'epic_id': self.epic.pk,
             'goal': 'New Goal',
@@ -813,7 +813,7 @@ class RefineStoryTests(BaseTestCase):
         """Test saving value factor scores."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
             'epic_id': self.epic.pk,
             'goal': '',
@@ -830,7 +830,7 @@ class RefineStoryTests(BaseTestCase):
         """Test saving cost factor scores."""
         story = Story.objects.create(epic=self.epic, title="Test Story")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
             'epic_id': self.epic.pk,
             'goal': '',
@@ -848,7 +848,7 @@ class RefineStoryTests(BaseTestCase):
         story1 = Story.objects.create(epic=self.epic, title="Story 1")
         story2 = Story.objects.create(epic=self.epic, title="Story 2")
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story1.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story1.pk]), {
             'action': 'add_dependency',
             'dependency_story_id': story2.pk,
         })
@@ -863,7 +863,7 @@ class RefineStoryTests(BaseTestCase):
         story2 = Story.objects.create(epic=self.epic, title="Story 2")
         dep = StoryDependency.objects.create(story=story1, depends_on=story2)
         
-        response = self.client.post(reverse('backlog:refine_story', args=[story1.pk]), {
+        response = self.client.post(reverse('backlog:story_detail', args=[story1.pk]), {
             'action': 'remove_dependency',
             'dependency_id': dep.pk,
         })
@@ -878,12 +878,12 @@ class CreateStoryTests(BaseTestCase):
 
     def test_create_story_page_loads(self):
         """Test create story page loads."""
-        response = self.client.get(reverse('backlog:create_story_refine'))
+        response = self.client.get(reverse('backlog:story_create'))
         self.assertEqual(response.status_code, 200)
 
     def test_create_story_success(self):
         """Test successfully creating a new story."""
-        response = self.client.post(reverse('backlog:create_story_refine'), {
+        response = self.client.post(reverse('backlog:story_create'), {
             'title': 'New Story',
             'epic_id': self.epic.pk,
             'goal': 'Story Goal',
@@ -898,7 +898,7 @@ class CreateStoryTests(BaseTestCase):
 
     def test_create_story_history_created(self):
         """Test that history entry is created for new story."""
-        response = self.client.post(reverse('backlog:create_story_refine'), {
+        response = self.client.post(reverse('backlog:story_create'), {
             'title': 'New Story',
             'epic_id': self.epic.pk,
             'goal': '',
@@ -911,7 +911,7 @@ class CreateStoryTests(BaseTestCase):
 
     def test_create_story_missing_title(self):
         """Test creating story without title re-renders form."""
-        response = self.client.post(reverse('backlog:create_story_refine'), {
+        response = self.client.post(reverse('backlog:story_create'), {
             'title': '',
             'epic_id': self.epic.pk,
         })
@@ -1317,24 +1317,29 @@ class ScoreSignalTests(BaseTestCase):
     """Tests for automatic score creation on story creation."""
 
     def test_scores_created_on_story_creation(self):
-        """Test that default scores are created when a story is created."""
+        """Test that score records are created when a story is created.
+        
+        Score records are created with answer=None (undefined), not with a
+        default score of 0. This distinguishes 'not yet scored' from an
+        explicit score of 0.
+        """
         story = Story.objects.create(epic=self.epic, title="New Story")
         
-        # Check value factor scores were created
+        # Check value factor score record was created with answer=None
         vf_score = StoryValueFactorScore.objects.filter(
             story=story,
             valuefactor=self.value_factor
         ).first()
         self.assertIsNotNone(vf_score)
-        self.assertEqual(vf_score.answer.score, 0)
+        self.assertIsNone(vf_score.answer)  # Undefined, not scored yet
         
-        # Check cost factor scores were created
+        # Check cost factor score record was created with answer=None
         cf_score = StoryCostFactorScore.objects.filter(
             story=story,
             costfactor=self.cost_factor
         ).first()
         self.assertIsNotNone(cf_score)
-        self.assertEqual(cf_score.answer.score, 0)
+        self.assertIsNone(cf_score.answer)  # Undefined, not scored yet
 
 
 class IntegrationTests(BaseTestCase):
@@ -1343,7 +1348,7 @@ class IntegrationTests(BaseTestCase):
     def test_complete_story_lifecycle(self):
         """Test complete story lifecycle from creation to done."""
         # Create story
-        response = self.client.post(reverse('backlog:create_story_refine'), {
+        response = self.client.post(reverse('backlog:story_create'), {
             'title': 'Lifecycle Story',
             'epic_id': self.epic.pk,
             'goal': 'Test the lifecycle',
@@ -1409,7 +1414,7 @@ class IntegrationTests(BaseTestCase):
         story2 = Story.objects.create(epic=self.epic, title="Story 2")
         
         # Archive epic
-        self.client.post(reverse('backlog:index'), {
+        self.client.post(reverse('backlog:epics'), {
             'action': 'archive_epic',
             'epic_id': self.epic.pk
         })
@@ -1442,3 +1447,271 @@ class IntegrationTests(BaseTestCase):
         self.assertEqual(story1.dependents.count(), 0)
         self.assertEqual(story2.dependents.count(), 1)
         self.assertEqual(story3.dependents.count(), 1)
+
+
+class DashboardViewTests(BaseTestCase):
+    """Test cases for the dashboard view."""
+
+    def test_dashboard_view_loads(self):
+        """Test that the dashboard view loads successfully."""
+        response = self.client.get(reverse('backlog:dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'backlog/dashboard.html')
+
+    def test_dashboard_context_has_required_keys(self):
+        """Test that dashboard context contains all required data."""
+        response = self.client.get(reverse('backlog:dashboard'))
+        self.assertIn('needs_scoring', response.context)
+        self.assertIn('needs_refinement', response.context)
+        self.assertIn('rotting_stories', response.context)
+        self.assertIn('review_required', response.context)
+        self.assertIn('summary', response.context)
+        self.assertIn('thresholds', response.context)
+
+    def test_dashboard_summary_counts(self):
+        """Test that summary counts are correct."""
+        response = self.client.get(reverse('backlog:dashboard'))
+        summary = response.context['summary']
+        
+        self.assertIn('total_stories', summary)
+        self.assertIn('needs_scoring', summary)
+        self.assertIn('needs_refinement', summary)
+        self.assertIn('rotting', summary)
+        self.assertIn('review_required', summary)
+        self.assertIn('healthy', summary)
+
+    def test_needs_scoring_when_factors_exist_before_story(self):
+        """Test that new stories need scoring since they have undefined (None) answers.
+        
+        Note: The signal creates score records with answer=None when a story is
+        created. This means 'needs scoring' since undefined != scored.
+        """
+        # Create story (will auto-create score records with answer=None)
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Story with Undefined Scores",
+            goal="Test goal",
+            workitems="Test workitems"
+        )
+        
+        # Story should have score records but with answer=None (undefined)
+        self.assertTrue(story.scores.exists())
+        self.assertTrue(story.cost_scores.exists())
+        self.assertIsNone(story.scores.first().answer)
+        self.assertIsNone(story.cost_scores.first().answer)
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        needs_scoring = [item['story'].id for item in response.context['needs_scoring']]
+        
+        # Story SHOULD be in needs_scoring since answers are None (undefined)
+        self.assertIn(story.id, needs_scoring)
+
+    def test_needs_scoring_when_new_factor_added(self):
+        """Test that story needs scoring when a new factor is added after creation."""
+        # Create story first
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Story Missing New Factor",
+            goal="Test goal",
+            workitems="Test workitems"
+        )
+        
+        # Now add a new value factor (story won't have a score for this)
+        new_section = ValueFactorSection.objects.create(
+            name="New Section",
+            description="New section description"
+        )
+        new_factor = ValueFactor.objects.create(
+            section=new_section,
+            name="New Factor",
+            description="New factor description"
+        )
+        ValueFactorAnswer.objects.create(
+            valuefactor=new_factor,
+            score=5,
+            description="New answer"
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        needs_scoring = [item['story'].id for item in response.context['needs_scoring']]
+        
+        # Story should be in needs_scoring since it's missing the new factor
+        self.assertIn(story.id, needs_scoring)
+
+    def test_needs_refinement_detection(self):
+        """Test that stories in idea status are detected as needing refinement."""
+        # Create story without goal and workitems (idea status)
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Idea Story"
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        needs_refinement = [item['story'].id for item in response.context['needs_refinement']]
+        
+        self.assertIn(story.id, needs_refinement)
+
+    def test_refined_story_not_in_needs_refinement(self):
+        """Test that refined stories are not in needs_refinement."""
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Refined Story",
+            goal="Clear goal",
+            workitems="Work to do"
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        needs_refinement = [item['story'].id for item in response.context['needs_refinement']]
+        
+        self.assertNotIn(story.id, needs_refinement)
+
+    def test_rotting_blocked_story(self):
+        """Test that stories blocked for too long are detected as rotting."""
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Blocked Story",
+            goal="Test goal",
+            workitems="Test workitems",
+            blocked="Waiting for API"
+        )
+        # Force update the updated_at to bypass auto_now
+        Story.objects.filter(pk=story.pk).update(
+            updated_at=timezone.now() - timedelta(days=10)
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        rotting = [item['story'].id for item in response.context['rotting_stories']]
+        
+        self.assertIn(story.id, rotting)
+
+    def test_rotting_started_story(self):
+        """Test that stories started but not progressing are detected as rotting."""
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Stalled Story",
+            goal="Test goal",
+            workitems="Test workitems",
+            started=timezone.now() - timedelta(days=20)  # Started 20 days ago
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        rotting = [item['story'].id for item in response.context['rotting_stories']]
+        
+        self.assertIn(story.id, rotting)
+
+    def test_rotting_planned_story(self):
+        """Test that stories planned but not started are detected as rotting."""
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Planned Story",
+            goal="Test goal",
+            workitems="Test workitems",
+            planned=timezone.now() - timedelta(days=35)  # Planned 35 days ago
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        rotting = [item['story'].id for item in response.context['rotting_stories']]
+        
+        self.assertIn(story.id, rotting)
+
+    def test_review_required_detection(self):
+        """Test that stories flagged for review are detected."""
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Review Story",
+            goal="Test goal",
+            workitems="Test workitems",
+            review_required=True
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        review_required = [item['story'].id for item in response.context['review_required']]
+        
+        self.assertIn(story.id, review_required)
+
+    def test_archived_stories_excluded(self):
+        """Test that archived stories are excluded from the dashboard."""
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Archived Story",
+            archived=True
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        
+        # Check all lists
+        all_story_ids = set()
+        for item in response.context['needs_scoring']:
+            all_story_ids.add(item['story'].id)
+        for item in response.context['needs_refinement']:
+            all_story_ids.add(item['story'].id)
+        for item in response.context['rotting_stories']:
+            all_story_ids.add(item['story'].id)
+        for item in response.context['review_required']:
+            all_story_ids.add(item['story'].id)
+        
+        self.assertNotIn(story.id, all_story_ids)
+
+    def test_dashboard_thresholds_present(self):
+        """Test that rotation thresholds are passed to template."""
+        response = self.client.get(reverse('backlog:dashboard'))
+        thresholds = response.context['thresholds']
+        
+        self.assertIn('started_days', thresholds)
+        self.assertIn('planned_days', thresholds)
+        self.assertIn('blocked_days', thresholds)
+        
+        # Verify default values
+        self.assertEqual(thresholds['started_days'], 14)
+        self.assertEqual(thresholds['planned_days'], 30)
+        self.assertEqual(thresholds['blocked_days'], 7)
+
+    def test_dashboard_healthy_count(self):
+        """Test that healthy count is calculated correctly."""
+        # Create a story with all factors scored (auto-scored with 0)
+        # and with goal/workitems set (so not in idea status)
+        story = Story.objects.create(
+            epic=self.epic,
+            title="Healthy Story",
+            goal="Clear goal",
+            workitems="Work items",
+            review_required=False
+        )
+        
+        # Update any default 0 scores to meaningful values
+        for score in story.scores.all():
+            score.answer = self.vf_answer_5
+            score.save()
+        for score in story.cost_scores.all():
+            score.answer = self.cf_answer_2
+            score.save()
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        
+        # The healthy story should be counted
+        self.assertGreaterEqual(response.context['summary']['healthy'], 1)
+
+    def test_rotting_stories_sorted_by_days(self):
+        """Test that rotting stories are sorted by days descending."""
+        # Create stories with different rotting durations
+        Story.objects.create(
+            epic=self.epic,
+            title="Less Stale",
+            goal="Goal",
+            workitems="Work",
+            started=timezone.now() - timedelta(days=15)
+        )
+        Story.objects.create(
+            epic=self.epic,
+            title="More Stale",
+            goal="Goal",
+            workitems="Work",
+            started=timezone.now() - timedelta(days=30)
+        )
+        
+        response = self.client.get(reverse('backlog:dashboard'))
+        rotting = response.context['rotting_stories']
+        
+        if len(rotting) >= 2:
+            # Most stale should come first
+            self.assertGreaterEqual(rotting[0]['days'], rotting[-1]['days'])

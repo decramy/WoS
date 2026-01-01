@@ -1,0 +1,408 @@
+{% extends 'backlog/base.html' %}
+{% load static %}
+
+{% block title %}Dashboard — WoS{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h2>📊 Dashboard</h2>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'backlog:stories' %}">📋 All Stories</a>
+  </div>
+</div>
+
+<div class="page-hint">
+  <strong>🎯 Stories Needing Attention:</strong> This dashboard highlights stories that require action — 
+  scoring, refinement, or have become stale. Address these to keep your backlog healthy.
+</div>
+
+<!-- Summary Cards -->
+<div class="dashboard-summary">
+  <div class="summary-card summary-scoring">
+    <div class="summary-icon">🎯</div>
+    <div class="summary-value">{{ summary.needs_scoring }}</div>
+    <div class="summary-label">Need Scoring</div>
+  </div>
+  <div class="summary-card summary-refinement">
+    <div class="summary-icon">✏️</div>
+    <div class="summary-value">{{ summary.needs_refinement }}</div>
+    <div class="summary-label">Need Refinement</div>
+  </div>
+  <div class="summary-card summary-rotting">
+    <div class="summary-icon">⏰</div>
+    <div class="summary-value">{{ summary.rotting }}</div>
+    <div class="summary-label">Rotting Stories</div>
+  </div>
+  <div class="summary-card summary-review">
+    <div class="summary-icon">👀</div>
+    <div class="summary-value">{{ summary.review_required }}</div>
+    <div class="summary-label">Need Review</div>
+  </div>
+  <div class="summary-card summary-healthy">
+    <div class="summary-icon">✅</div>
+    <div class="summary-value">{{ summary.healthy }}</div>
+    <div class="summary-label">Healthy</div>
+  </div>
+</div>
+
+<!-- Needs Scoring Section -->
+<div class="dashboard-section">
+  <div class="section-header">
+    <h3>🎯 Stories Needing Scoring</h3>
+    <span class="section-count">{{ summary.needs_scoring }} stories</span>
+  </div>
+  <div class="section-hint">These stories are missing value or cost factor scores. Score them to calculate WSJF priority.</div>
+  
+  {% if needs_scoring %}
+  <table class="dashboard-table">
+    <thead>
+      <tr>
+        <th>Story</th>
+        <th>Epic</th>
+        <th>Status</th>
+        <th>Missing</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in needs_scoring %}
+      <tr>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
+        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td><span class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|title }}</span></td>
+        <td class="text-muted">
+          {% if item.missing_value_count %}{{ item.missing_value_count }} value{% endif %}
+          {% if item.missing_value_count and item.missing_cost_count %}, {% endif %}
+          {% if item.missing_cost_count %}{{ item.missing_cost_count }} cost{% endif %}
+        </td>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="btn btn-small">Score →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state-small">
+    <span class="empty-icon">✅</span>
+    <span class="empty-text">All stories are scored!</span>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Needs Refinement Section -->
+<div class="dashboard-section">
+  <div class="section-header">
+    <h3>✏️ Stories Needing Refinement</h3>
+    <span class="section-count">{{ summary.needs_refinement }} stories</span>
+  </div>
+  <div class="section-hint">These stories are in "Idea" status — missing a goal or work items. Refine them to make them actionable.</div>
+  
+  {% if needs_refinement %}
+  <table class="dashboard-table">
+    <thead>
+      <tr>
+        <th>Story</th>
+        <th>Epic</th>
+        <th>Missing</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in needs_refinement %}
+      <tr>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
+        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td class="text-muted">
+          {% for field in item.missing %}
+            {{ field|title }}{% if not forloop.last %}, {% endif %}
+          {% endfor %}
+        </td>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="btn btn-small">Refine →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state-small">
+    <span class="empty-icon">✅</span>
+    <span class="empty-text">All stories are refined!</span>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Rotting Stories Section -->
+<div class="dashboard-section">
+  <div class="section-header">
+    <h3>⏰ Rotting Stories</h3>
+    <span class="section-count">{{ summary.rotting }} stories</span>
+  </div>
+  <div class="section-hint">
+    Stories that have been blocked ({{ thresholds.blocked_days }}+ days), 
+    started without progress ({{ thresholds.started_days }}+ days), 
+    or planned but not started ({{ thresholds.planned_days }}+ days).
+  </div>
+  
+  {% if rotting_stories %}
+  <table class="dashboard-table">
+    <thead>
+      <tr>
+        <th>Story</th>
+        <th>Epic</th>
+        <th>Status</th>
+        <th>Days</th>
+        <th>Reason</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in rotting_stories %}
+      <tr class="{% if item.reason == 'blocked' %}row-danger{% elif item.reason == 'started' %}row-warning{% else %}row-info{% endif %}">
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
+        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td><span class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|title }}</span></td>
+        <td><strong>{{ item.days }}</strong> days</td>
+        <td>
+          {% if item.reason == 'blocked' %}
+            <span class="badge badge-danger">🚫 Blocked{% if item.blocked_reason %}: {{ item.blocked_reason|truncatechars:20 }}{% endif %}</span>
+          {% elif item.reason == 'started' %}
+            <span class="badge badge-warning">⚠️ Stalled</span>
+          {% else %}
+            <span class="badge badge-info">📅 Waiting to start</span>
+          {% endif %}
+        </td>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="btn btn-small">Review →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state-small">
+    <span class="empty-icon">✅</span>
+    <span class="empty-text">No rotting stories!</span>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Review Required Section -->
+<div class="dashboard-section">
+  <div class="section-header">
+    <h3>👀 Review Required</h3>
+    <span class="section-count">{{ summary.review_required }} stories</span>
+  </div>
+  <div class="section-hint">Stories that have been flagged for review by team members.</div>
+  
+  {% if review_required %}
+  <table class="dashboard-table">
+    <thead>
+      <tr>
+        <th>Story</th>
+        <th>Epic</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in review_required %}
+      <tr>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
+        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td><span class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|title }}</span></td>
+        <td class="text-muted">{{ item.story.created_at|date:"M d, Y" }}</td>
+        <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="btn btn-small">Review →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state-small">
+    <span class="empty-icon">✅</span>
+    <span class="empty-text">No stories flagged for review!</span>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+/* Dashboard Summary Cards */
+.dashboard-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.summary-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.summary-value {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.summary-scoring .summary-value { color: var(--accent); }
+.summary-refinement .summary-value { color: #7c3aed; }
+.summary-rotting .summary-value { color: var(--warning); }
+.summary-review .summary-value { color: #0891b2; }
+.summary-healthy .summary-value { color: var(--accent-2); }
+
+/* Dashboard Sections */
+.dashboard-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.section-count {
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.section-hint {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+/* Dashboard Table */
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.dashboard-table th {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.dashboard-table tbody tr:hover {
+  background: var(--bg);
+}
+
+.dashboard-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Row highlights for rotting stories */
+.row-danger { background: rgba(225, 29, 72, 0.05); }
+.row-warning { background: rgba(245, 158, 11, 0.05); }
+.row-info { background: rgba(37, 99, 235, 0.05); }
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-danger {
+  background: rgba(225, 29, 72, 0.1);
+  color: var(--danger);
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
+.badge-info {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--accent);
+}
+
+/* Small button */
+.btn-small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* Text utilities */
+.text-muted {
+  color: var(--muted);
+}
+
+/* Empty state for sections */
+.empty-state-small {
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+}
+
+.empty-state-small .empty-icon {
+  font-size: 24px;
+  margin-right: 8px;
+}
+
+.empty-state-small .empty-text {
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .dashboard-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .dashboard-table {
+    font-size: 13px;
+  }
+  
+  .dashboard-table th,
+  .dashboard-table td {
+    padding: 8px;
+  }
+}
+</style>
+{% endblock %}

@@ -5,7 +5,7 @@
 <div class="page-head">
 	<h2>🗂️ Work Breakdown Structure</h2>
 	<div class="page-actions">
-		<a class="btn" href="{% url 'backlog:create_story_refine' %}">+ Create Story</a>
+		<a class="btn" href="{% url 'backlog:story_create' %}">+ Create Story</a>
 	</div>
 </div>
 
@@ -71,7 +71,7 @@
 			<div class="gantt-row" data-id="{{ story.id }}" data-cost="{{ story.cost }}" data-cost-percent="{{ story.cost_percent }}">
 				<div class="gantt-label">
 					<span class="gantt-epic">{{ story.epic_title }}</span>
-					<a href="{% url 'backlog:refine_story' story.id %}" class="gantt-title">{{ story.title }}</a>
+					<a href="{% url 'backlog:story_detail' story.id %}" class="gantt-title">{{ story.title }}</a>
 				</div>
 				<div class="gantt-bar-container">
 					<div class="gantt-bar status-{{ story.status }}" data-status="{{ story.status }}">

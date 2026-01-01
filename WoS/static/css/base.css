@@ -286,3 +286,34 @@ main { padding: 20px }
   .refine-right{ border-left:0; padding-left:0 }
   .factor-row{ grid-template-columns: 1fr }
 }
+
+/* Footer */
+footer {
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  padding: 16px 20px;
+  margin-top: 40px;
+  text-align: center;
+}
+
+.footer-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.footer-content a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.footer-content a:hover {
+  text-decoration: underline;
+}
+
+.footer-separator {
+  color: var(--border);
+}

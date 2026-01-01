@@ -110,12 +110,15 @@ Access at `http://127.0.0.1:8000/`
 | URL | Description |
 |-----|-------------|
 | `/` | Redirects to `/backlog/` |
-| `/backlog/` | Epics overview (main dashboard) |
-| `/backlog/stories/` | Stories list with filters |
+| `/backlog/` | Redirects to `/backlog/epics/` |
+| `/backlog/epics/` | Epic list (overview) |
+| `/backlog/epic/new/` | Create new epic |
+| `/backlog/epic/<id>/` | Epic detail/edit page |
+| `/backlog/stories/` | Story list with filters |
 | `/backlog/story/new/` | Create new story |
-| `/backlog/story/<id>/refine/` | Edit/refine a story |
-| `/backlog/kanban/` | Kanban board |
+| `/backlog/story/<id>/` | Story detail/edit page |
 | `/backlog/report/` | WSJF priority report |
+| `/backlog/kanban/` | Kanban board |
 | `/backlog/wbs/` | Work Breakdown Structure |
 | `/backlog/health/` | Health check endpoint |
 | `/admin/` | Django admin interface |

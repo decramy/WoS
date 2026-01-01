@@ -18,9 +18,10 @@
             </div>
             <nav class="main-nav">
                 <a class="btn" href="{% url 'admin:index' %}" title="Django Admin">⚙️ Admin</a>
-                <a class="btn" href="{% url 'backlog:index' %}" title="Manage your epics">📁 Epics</a>
+                <a class="btn" href="{% url 'backlog:dashboard' %}" title="Stories needing attention">📊 Dashboard</a>
+                <a class="btn" href="{% url 'backlog:epics' %}" title="Manage your epics">📁 Epics</a>
                 <a class="btn" href="{% url 'backlog:stories' %}" title="View all stories">📋 Stories</a>
-                <a class="btn" href="{% url 'backlog:report' %}" title="WSJF Score Report">📊 Report</a>
+                <a class="btn" href="{% url 'backlog:report' %}" title="WSJF Score Report">📈 Report</a>
                 <a class="btn" href="{% url 'backlog:kanban' %}" title="Kanban Board">📌 Kanban</a>
                 <a class="btn" href="{% url 'backlog:wbs' %}" title="Work Breakdown & Dependencies">🔗 WBS</a>
             </nav>
@@ -43,6 +44,15 @@
         {% block content %}
         {% endblock %}
     </main>
+    <footer>
+        <div class="footer-content">
+            <span>WoS v1.0.0</span>
+            <span class="footer-separator">•</span>
+            <a href="{% url 'backlog:changelog' %}">Changelog</a>
+            <span class="footer-separator">•</span>
+            <a href="https://github.com/decramy/WoS" target="_blank">GitHub</a>
+        </div>
+    </footer>
     <script src="{% static 'js/app.js' %}"></script>
 </body>
 </html>
