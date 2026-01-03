@@ -27,7 +27,11 @@ ALLOWED_HOSTS = [h for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',
 
 # CSRF settings for production
 # Set CSRF_TRUSTED_ORIGINS to your domain(s), e.g., "https://example.com,https://www.example.com"
-CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o]
+_csrf_origins_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins_env.split(',') if o.strip()]
+
+# Debug: print what we got
+print(f"[Settings] CSRF_TRUSTED_ORIGINS from env: '{_csrf_origins_env}' -> {CSRF_TRUSTED_ORIGINS}")
 
 # If no trusted origins specified but ALLOWED_HOSTS is set, auto-generate from ALLOWED_HOSTS
 if not CSRF_TRUSTED_ORIGINS and ALLOWED_HOSTS and '*' not in ALLOWED_HOSTS:
@@ -36,6 +40,7 @@ if not CSRF_TRUSTED_ORIGINS and ALLOWED_HOSTS and '*' not in ALLOWED_HOSTS:
         if host and not host.startswith('.'):
             CSRF_TRUSTED_ORIGINS.append(f'http://{host}')
             CSRF_TRUSTED_ORIGINS.append(f'https://{host}')
+    print(f"[Settings] CSRF_TRUSTED_ORIGINS auto-generated: {CSRF_TRUSTED_ORIGINS}")
 
 # Proxy settings - trust X-Forwarded-Proto header from reverse proxy (Traefik, nginx, etc.)
 if os.environ.get('DJANGO_SECURE_PROXY_SSL_HEADER', '').lower() in ('1', 'true', 'yes'):
@@ -51,6 +56,7 @@ if not DEBUG:
 
 # For private apps behind authenticated reverse proxy, CSRF can be disabled
 CSRF_DISABLED = os.environ.get('CSRF_DISABLE', '').lower() in ('1', 'true', 'yes')
+print(f"[Settings] CSRF_DISABLE={os.environ.get('CSRF_DISABLE', '')} -> CSRF_DISABLED={CSRF_DISABLED}")
 
 # Application definition
 
