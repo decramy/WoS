@@ -53,7 +53,7 @@ WoS helps teams prioritize their backlog by calculating a WSJF score for each st
 ```bash
 # Clone the repository
 git clone https://github.com/decramy/WoS.git
-cd WoS/WoS
+cd WoS
 
 # Start with Docker Compose
 docker compose up --build
@@ -68,7 +68,7 @@ Access at `http://localhost:8000/`
 docker pull ghcr.io/decramy/wos:latest
 
 # Or use docker-compose.prod.yml
-curl -O https://raw.githubusercontent.com/decramy/WoS/main/WoS/docker-compose.prod.yml
+curl -O https://raw.githubusercontent.com/decramy/WoS/main/docker-compose.prod.yml
 docker compose -f docker-compose.prod.yml up -d
 ```
 
@@ -77,7 +77,7 @@ docker compose -f docker-compose.prod.yml up -d
 ```bash
 # Clone the repository
 git clone https://github.com/decramy/WoS.git
-cd WoS/WoS
+cd WoS
 
 # Create virtual environment
 python -m venv .venv
