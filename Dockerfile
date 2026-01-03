@@ -15,17 +15,21 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . /app/
 
+# Create data directory for SQLite database
+RUN mkdir -p /app/data && chmod 777 /app/data
+
 # Environment defaults (can be overridden)
 ENV DJANGO_ALLOWED_HOSTS="*" \
-    DJANGO_DEBUG="False"
-
-# Collect static (safe even if none configured)
-RUN python manage.py collectstatic --noinput || true
+    DJANGO_DEBUG="False" \
+    DATABASE_PATH="/app/data/db.sqlite3"
 
 EXPOSE 8000
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Volume for persistent data
+VOLUME ["/app/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -fsS http://localhost:8000/backlog/health/ || exit 1

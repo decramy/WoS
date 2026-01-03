@@ -16,8 +16,9 @@ services:
     environment:
       DJANGO_DEBUG: "False"
       DJANGO_ALLOWED_HOSTS: "*"
+      DATABASE_PATH: "/app/data/db.sqlite3"
     volumes:
-      - ./db.sqlite3:/app/db.sqlite3
+      - wos-data:/app/data
       - staticfiles:/app/staticfiles
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/backlog/health/"]
@@ -28,5 +29,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  wos-data:
+    # Named volume for database persistence
   staticfiles:
     driver: local

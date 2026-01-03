@@ -70,11 +70,14 @@ WSGI_APPLICATION = 'wos.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/X.X/ref/settings/#databases
+# Use DATABASE_PATH env var if set, otherwise default to db.sqlite3 in BASE_DIR
+
+DATABASE_PATH = os.environ.get('DATABASE_PATH', str(BASE_DIR / 'db.sqlite3'))
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': DATABASE_PATH,
     }
 }
 
