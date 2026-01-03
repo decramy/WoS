@@ -1,0 +1,32 @@
+# Production docker-compose that pulls from GitHub Container Registry
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+#
+# First, log in to ghcr.io:
+#   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+#
+# Or use a Personal Access Token with read:packages scope
+
+version: "3.8"
+
+services:
+  web:
+    image: ghcr.io/decramy/wos:latest
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_DEBUG: "False"
+      DJANGO_ALLOWED_HOSTS: "*"
+    volumes:
+      - ./db.sqlite3:/app/db.sqlite3
+      - staticfiles:/app/staticfiles
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/backlog/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  staticfiles:
+    driver: local

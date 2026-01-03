@@ -61,7 +61,18 @@ docker compose up --build
 
 Access at `http://localhost:8000/`
 
-### Option 2: Local Development
+### Option 2: Pull from GitHub Container Registry
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/decramy/wos:latest
+
+# Or use docker-compose.prod.yml
+curl -O https://raw.githubusercontent.com/decramy/WoS/main/WoS/docker-compose.prod.yml
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Option 3: Local Development
 
 ```bash
 # Clone the repository
