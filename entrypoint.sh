@@ -48,6 +48,10 @@ python manage.py migrate --noinput
 # Verify database is actually writable by doing a test write
 echo "🧪 Testing database write access..."
 python -c "
+import django
+import os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'wos.settings')
+django.setup()
 from django.db import connection
 cursor = connection.cursor()
 cursor.execute('CREATE TABLE IF NOT EXISTS _write_test (id INTEGER PRIMARY KEY)')
