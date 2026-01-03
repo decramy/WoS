@@ -86,12 +86,37 @@ jobs:
             -p 8000:8000 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           
-          # Wait for container to be healthy
+          # Wait for container to be healthy with retry logic
           echo "Waiting for container to be ready..."
-          sleep 15
+          max_attempts=30
+          attempt=1
           
-          # Test health endpoint
-          curl -fsS http://localhost:8000/backlog/health/ || exit 1
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt/$max_attempts: Checking health endpoint..."
+            if curl -fsS http://localhost:8000/backlog/health/ > /dev/null 2>&1; then
+              echo "✅ Health check passed!"
+              break
+            fi
+            
+            # Check if container is still running
+            if ! docker ps | grep -q wos-test; then
+              echo "❌ Container stopped unexpectedly!"
+              echo "Container logs:"
+              docker logs wos-test 2>&1 || true
+              exit 1
+            fi
+            
+            attempt=$((attempt + 1))
+            sleep 2
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+            echo "❌ Health check failed after $max_attempts attempts"
+            echo "Container logs:"
+            docker logs wos-test 2>&1 || true
+            docker stop wos-test 2>/dev/null || true
+            exit 1
+          fi
           
           # Stop container
           docker stop wos-test
