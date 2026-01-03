@@ -25,6 +25,33 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
 ALLOWED_HOSTS = [h for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',') if h]
 
+# CSRF settings for production
+# Set CSRF_TRUSTED_ORIGINS to your domain(s), e.g., "https://example.com,https://www.example.com"
+CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o]
+
+# If no trusted origins specified but ALLOWED_HOSTS is set, auto-generate from ALLOWED_HOSTS
+if not CSRF_TRUSTED_ORIGINS and ALLOWED_HOSTS and '*' not in ALLOWED_HOSTS:
+    # Generate both http and https versions for each allowed host
+    for host in ALLOWED_HOSTS:
+        if host and not host.startswith('.'):
+            CSRF_TRUSTED_ORIGINS.append(f'http://{host}')
+            CSRF_TRUSTED_ORIGINS.append(f'https://{host}')
+
+# Proxy settings - trust X-Forwarded-Proto header from reverse proxy (Traefik, nginx, etc.)
+if os.environ.get('DJANGO_SECURE_PROXY_SSL_HEADER', '').lower() in ('1', 'true', 'yes'):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # Also set these for better security behind proxy
+    USE_X_FORWARDED_HOST = True
+    USE_X_FORWARDED_PORT = True
+
+# Cookie settings for HTTPS behind proxy
+if not DEBUG:
+    CSRF_COOKIE_SECURE = os.environ.get('CSRF_COOKIE_SECURE', 'true').lower() in ('1', 'true', 'yes')
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'true').lower() in ('1', 'true', 'yes')
+
+# For private apps behind authenticated reverse proxy, CSRF can be disabled
+CSRF_DISABLED = os.environ.get('CSRF_DISABLE', '').lower() in ('1', 'true', 'yes')
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -47,6 +74,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Remove CSRF middleware if disabled (for private apps behind authenticated proxy)
+if CSRF_DISABLED:
+    MIDDLEWARE = [m for m in MIDDLEWARE if 'csrf' not in m.lower()]
 
 ROOT_URLCONF = 'wos.urls'
 

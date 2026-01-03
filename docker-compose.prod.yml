@@ -11,12 +11,18 @@ version: "3.8"
 services:
   web:
     image: ghcr.io/decramy/wos:latest
-    ports:
-      - "8000:8000"
+    # No need to expose port publicly - Traefik connects via internal network
+    expose:
+      - "8000"
     environment:
       DJANGO_DEBUG: "False"
-      DJANGO_ALLOWED_HOSTS: "*"
+      DJANGO_ALLOWED_HOSTS: "wos.decramy.net,localhost"
+      CSRF_TRUSTED_ORIGINS: "https://wos.decramy.net"
+      # For private apps behind Traefik basic auth, CSRF can be safely disabled
+      CSRF_DISABLE: "true"
       DATABASE_PATH: "/app/data/db.sqlite3"
+      # Trust X-Forwarded-Proto header from Traefik
+      DJANGO_SECURE_PROXY_SSL_HEADER: "true"
     volumes:
       - wos-data:/app/data
       - staticfiles:/app/staticfiles
@@ -27,6 +33,20 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wos.rule=Host(`wos.decramy.net`)"
+      - "traefik.http.routers.wos.entrypoints=websecure"
+      - "traefik.http.routers.wos.tls.certresolver=letsencrypt"
+      - "traefik.http.services.wos.loadbalancer.server.port=8000"
+      # Add your basic auth middleware here
+      # - "traefik.http.routers.wos.middlewares=your-auth-middleware@docker"
+    networks:
+      - traefik  # Your Traefik network
+
+networks:
+  traefik:
+    external: true
 
 volumes:
   wos-data:

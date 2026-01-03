@@ -4,8 +4,10 @@ set -e
 # Check database file permissions
 DB_FILE="${DATABASE_PATH:-/app/data/db.sqlite3}"
 DB_DIR=$(dirname "$DB_FILE")
+DB_EXISTS=false
 
 echo "🔍 Checking database permissions..."
+echo "   Database path: $DB_FILE"
 
 # Ensure directory exists
 if [ ! -d "$DB_DIR" ]; then
@@ -30,24 +32,26 @@ fi
 
 # If database exists, check it's writable
 if [ -f "$DB_FILE" ]; then
+    DB_EXISTS=true
     if [ ! -w "$DB_FILE" ]; then
         echo "❌ ERROR: Database file is not writable: $DB_FILE"
         echo "   Current permissions: $(ls -l "$DB_FILE")"
         echo "   Running as user: $(id)"
         exit 1
     fi
-    echo "✅ Database file is writable: $DB_FILE"
+    echo "✅ Existing database found and writable: $DB_FILE"
 else
-    echo "📝 Database file will be created: $DB_FILE"
+    echo "📝 New database will be created: $DB_FILE"
 fi
 
 # Apply migrations
 echo "🔄 Applying database migrations..."
 python manage.py migrate --noinput
 
-# Verify database is actually writable by doing a test write
-echo "🧪 Testing database write access..."
-python -c "
+# Only run write test for new databases (migrations already test existing ones)
+if [ "$DB_EXISTS" = false ]; then
+    echo "🧪 Testing database write access..."
+    python -c "
 import django
 import os
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'wos.settings')
@@ -58,10 +62,11 @@ cursor.execute('CREATE TABLE IF NOT EXISTS _write_test (id INTEGER PRIMARY KEY)'
 cursor.execute('DROP TABLE _write_test')
 print('✅ Database write test passed!')
 " || {
-    echo "❌ ERROR: Database write test failed!"
-    echo "   The database file exists but cannot be written to."
-    exit 1
-}
+        echo "❌ ERROR: Database write test failed!"
+        echo "   The database file exists but cannot be written to."
+        exit 1
+    }
+fi
 
 # Collect static files
 echo "📦 Collecting static files..."
