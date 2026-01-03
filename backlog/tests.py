@@ -919,6 +919,64 @@ class CreateStoryTests(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Story.objects.filter(epic=self.epic).exists())
 
+    def test_create_story_missing_epic(self):
+        """Test creating story without epic shows error and preserves input."""
+        response = self.client.post(reverse('backlog:story_create'), {
+            'title': 'Test Story Without Epic',
+            'epic_id': '',
+            'goal': 'My Goal',
+            'workitems': 'My Workitems',
+        })
+        # Should re-render form, not create story
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Story.objects.filter(title='Test Story Without Epic').exists())
+        
+        # Should show error message
+        messages_list = list(response.context['messages'])
+        self.assertEqual(len(messages_list), 1)
+        self.assertIn('Epic is required', str(messages_list[0]))
+        
+        # Should preserve the input
+        self.assertContains(response, 'Test Story Without Epic')
+        self.assertContains(response, 'My Goal')
+        self.assertContains(response, 'My Workitems')
+
+    def test_create_story_missing_both_title_and_epic(self):
+        """Test creating story without title and epic shows both errors."""
+        response = self.client.post(reverse('backlog:story_create'), {
+            'title': '',
+            'epic_id': '',
+        })
+        # Should re-render form
+        self.assertEqual(response.status_code, 200)
+        
+        # Should show error message with both errors
+        messages_list = list(response.context['messages'])
+        self.assertEqual(len(messages_list), 1)
+        message_text = str(messages_list[0])
+        self.assertIn('Title is required', message_text)
+        self.assertIn('Epic is required', message_text)
+
+    def test_create_story_epic_preselection_from_query_param(self):
+        """Test that epic is pre-selected when passed as query parameter."""
+        response = self.client.get(
+            reverse('backlog:story_create') + f'?epic={self.epic.pk}'
+        )
+        self.assertEqual(response.status_code, 200)
+        # The story in context should have the epic pre-filled
+        story = response.context['story']
+        self.assertEqual(story.epic, self.epic)
+
+    def test_create_story_epic_preselection_invalid_epic_ignored(self):
+        """Test that invalid epic ID in query param is ignored."""
+        response = self.client.get(
+            reverse('backlog:story_create') + '?epic=99999'
+        )
+        self.assertEqual(response.status_code, 200)
+        # The story in context should not have an epic
+        story = response.context['story']
+        self.assertIsNone(story.epic)
+
 
 class KanbanViewTests(BaseTestCase):
     """Tests for Kanban board functionality."""

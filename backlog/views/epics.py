@@ -7,6 +7,7 @@ Handles CRUD operations for epics:
 - edit_epic: Edit an existing epic via dedicated page
 """
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from ..models import Epic, Story
 
@@ -90,22 +91,34 @@ def create_epic(request):
     """Create a new Epic via dedicated form page.
     
     GET: Display the creation form
-    POST: Create epic and redirect to overview
+    POST: Create epic and redirect to previous page or overview
     """
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         description = request.POST.get('description', '').strip()
         if title:
             Epic.objects.create(title=title, description=description)
+            # Redirect to next URL if provided, otherwise to epic overview
+            next_url = request.POST.get('next', '').strip()
+            if next_url:
+                return redirect(next_url)
             return redirect('backlog:epics')
-    return render(request, 'backlog/create_epic.html', {})
+    
+    # Get next URL from query param for back link
+    next_url = request.GET.get('next', '').strip()
+    back_url = reverse('backlog:epics')
+    
+    return render(request, 'backlog/create_epic.html', {
+        'next_url': next_url,
+        'back_url': back_url,
+    })
 
 
 def edit_epic(request, pk):
     """Edit an existing Epic.
     
     GET: Display edit form with current values
-    POST: Update epic and redirect to overview
+    POST: Update epic and redirect to previous page or overview
     """
     epic = get_object_or_404(Epic, pk=pk)
     if request.method == 'POST':
@@ -115,6 +128,19 @@ def edit_epic(request, pk):
             epic.title = title
             epic.description = description
             epic.save()
+            # Redirect to next URL if provided, otherwise to epic overview
+            next_url = request.POST.get('next', '').strip()
+            if next_url:
+                return redirect(next_url)
             return redirect('backlog:epics')
         # fall through and show form with current values
-    return render(request, 'backlog/edit_epic.html', {'epic': epic})
+    
+    # Get next URL from query param for back link
+    next_url = request.GET.get('next', '').strip()
+    back_url = reverse('backlog:epics')
+    
+    return render(request, 'backlog/edit_epic.html', {
+        'epic': epic,
+        'next_url': next_url,
+        'back_url': back_url,
+    })

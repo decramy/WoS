@@ -10,6 +10,7 @@
 
 <form method="post" action="" class="page-content-with-fixed-bar" id="epic-form">
   {% csrf_token %}
+  <input type="hidden" name="next" value="{{ next_url }}">
   
   <!-- Big clickable title -->
   <h1 id="title-display" class="title-display" onclick="showTitleInput()">
@@ -34,14 +35,31 @@
 <!-- Fixed save bar at bottom of screen -->
 <div class="fixed-save-bar">
   <button type="submit" form="epic-form">✨ Create Epic</button>
-  <a href="{% url 'backlog:epics' %}" class="back-link">← Back to Epics</a>
+  <a href="{{ next_url|default:back_url }}" class="back-link">← Back to Epics</a>
 </div>
 
 <script>
+// Save button state management for new epic
+var saveButton = null;
+
+function updateCreateButton() {
+  var titleInput = document.getElementById('title-input');
+  if (saveButton) {
+    saveButton.disabled = !titleInput.value.trim();
+  }
+}
+
 // Auto-focus title input for new epic
 document.addEventListener('DOMContentLoaded', function() {
   var titleInput = document.getElementById('title-input');
   var titleDisplay = document.getElementById('title-display');
+  
+  // Initialize save button - disabled until title is entered
+  saveButton = document.querySelector('.fixed-save-bar button[form="epic-form"]');
+  if (saveButton) saveButton.disabled = true;
+  
+  // Listen for input on title
+  titleInput.addEventListener('input', updateCreateButton);
   
   // Automatically show and focus the title input
   titleDisplay.classList.add('hidden');

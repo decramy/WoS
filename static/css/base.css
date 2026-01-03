@@ -205,9 +205,14 @@ main { padding: 20px }
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background 0.15s;
 }
-.fixed-save-bar button[type="submit"]:hover { opacity: 0.9; }
+.fixed-save-bar button[type="submit"]:hover:not(:disabled) { opacity: 0.9; }
+.fixed-save-bar button[type="submit"]:disabled {
+  background: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 .fixed-save-bar .back-link { 
   padding: 10px 16px; 
   font-size: 14px;

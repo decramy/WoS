@@ -113,6 +113,7 @@
   {% csrf_token %}
   <input type="hidden" name="story_id" value="{{ story.id }}">
   <input type="hidden" name="action" value="edit_story">
+  <input type="hidden" name="next" value="{{ next_url }}">
 
   <!-- Big clickable title -->
   <h1 id="title-display" class="story-title-display" onclick="showTitleInput()">
@@ -425,14 +426,73 @@
       </form>
     {% endif %}
   {% endif %}
-  <a href="{% url 'backlog:stories' %}" class="back-link">← Back to Stories</a>
+  <a href="{{ next_url|default:back_url }}" class="back-link">← Back to Stories</a>
 </div>
 
 <script>
+// Form change tracking for save button
+var formChanged = false;
+var initialFormState = '';
+var saveButton = null;
+
+function getFormState() {
+  var form = document.getElementById('refine-form');
+  var formData = new FormData(form);
+  var state = [];
+  for (var pair of formData.entries()) {
+    if (pair[0] !== 'csrfmiddlewaretoken') {
+      state.push(pair[0] + '=' + pair[1]);
+    }
+  }
+  return state.sort().join('&');
+}
+
+function updateSaveButton() {
+  var currentState = getFormState();
+  formChanged = (currentState !== initialFormState);
+  if (saveButton) {
+    saveButton.disabled = !formChanged;
+  }
+}
+
+function updateCreateButton() {
+  var titleInput = document.getElementById('title-input');
+  var epicSelect = document.getElementById('story_epic');
+  if (saveButton) {
+    // Enable only if both title and epic are filled
+    saveButton.disabled = !titleInput.value.trim() || !epicSelect.value;
+  }
+}
+
 // Auto-focus title input for new stories (no title yet)
 document.addEventListener('DOMContentLoaded', function() {
   var titleInput = document.getElementById('title-input');
   var titleDisplay = document.getElementById('title-display');
+  
+  // Get save button and store initial form state
+  saveButton = document.querySelector('.fixed-save-bar button[form="refine-form"]');
+  
+  // Check if new story (no ID) or existing story
+  var storyId = document.querySelector('input[name="story_id"]').value;
+  if (storyId) {
+    // Existing story - track changes
+    initialFormState = getFormState();
+    if (saveButton) saveButton.disabled = true;
+    
+    // Listen for changes on all form elements
+    var form = document.getElementById('refine-form');
+    form.querySelectorAll('input, select, textarea').forEach(function(el) {
+      el.addEventListener('change', updateSaveButton);
+      el.addEventListener('input', updateSaveButton);
+    });
+  } else {
+    // New story - disable until title and epic are filled
+    if (saveButton) saveButton.disabled = true;
+    titleInput.addEventListener('input', updateCreateButton);
+    document.getElementById('story_epic').addEventListener('change', updateCreateButton);
+    // Check initial state (epic may be pre-selected)
+    updateCreateButton();
+  }
   
   // Check if this is a new story (no title)
   if (!titleInput.value.trim()) {

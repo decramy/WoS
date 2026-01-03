@@ -11,7 +11,7 @@
       <a class="btn" href="{% url 'backlog:epics' %}">← Active Epics</a>
     {% else %}
       <a class="btn" href="{% url 'backlog:epics' %}?archived=1">📦 View Archived</a>
-      <a class="btn" href="{% url 'backlog:epic_create' %}">➕ Create Epic</a>
+      <a class="btn" href="{% url 'backlog:epic_create' %}?next={{ request.get_full_path|urlencode }}">➕ Create Epic</a>
     {% endif %}
   </div>
 </div>
@@ -70,7 +70,7 @@
               <button type="submit" title="Archive epic{% if item.unfinished_count > 0 %} ({{ item.unfinished_count }} unfinished){% endif %}" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">📦</button>
             </form>
           {% endif %}
-          <a href="{% url 'backlog:epic_detail' item.epic.id %}" title="Edit epic" style="margin-left:8px;">✏️</a>
+          <a href="{% url 'backlog:epic_detail' item.epic.id %}?next={{ request.get_full_path|urlencode }}" title="Edit epic" style="margin-left:8px;">✏️</a>
           <a href="{% url 'backlog:stories' %}?epic={{ item.epic.id }}" title="View stories in this epic" style="margin-left:8px;">📄</a>
           <form method="post" action="" style="display:inline;margin-left:8px;">
             {% csrf_token %}

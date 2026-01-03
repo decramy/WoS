@@ -9,6 +9,7 @@ Handles story CRUD and refinement:
 from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from ..models import (
     CostFactor,
@@ -238,10 +239,18 @@ def refine_story(request, pk):
                     story=story, costfactor=cf, defaults={"answer": answer}
                 )
         messages.success(request, f'✅ Story "{story.title}" has been updated successfully.')
+        # Redirect to next URL if provided, otherwise to story detail
+        next_url = request.POST.get('next', '').strip()
+        if next_url:
+            return redirect(next_url)
         return redirect('backlog:story_detail', pk=story.pk)
 
     # Get history for this story
     history = story.history.all()[:50]  # Limit to last 50 entries
+    
+    # Get next URL from query param for back link
+    next_url = request.GET.get('next', '').strip()
+    back_url = reverse('backlog:stories')
 
     return render(
         request,
@@ -256,6 +265,8 @@ def refine_story(request, pk):
             "same_epic_stories": same_epic_stories,
             "other_epics_stories": list(other_epics_stories.values()),
             "history": history,
+            "next_url": next_url,
+            "back_url": back_url,
         },
     )
 
@@ -362,24 +373,85 @@ def create_story_refine(request):
                     )
 
             messages.success(request, f'✅ Story "{story.title}" has been created successfully.')
+            # Redirect to next URL if provided, otherwise to story detail
+            next_url = request.POST.get('next', '').strip()
+            if next_url:
+                return redirect(next_url)
             return redirect('backlog:story_detail', pk=story.pk)
-        # if validation fails, fall through to re-render the form with epics
+        else:
+            # Validation failed - show error and preserve input
+            errors = []
+            if not title:
+                errors.append('Title is required')
+            if not epic_pk:
+                errors.append('Epic is required')
+            messages.error(request, '❌ ' + ', '.join(errors) + '.')
+            
+            # Preserve the submitted values
+            class _S:
+                def __init__(self):
+                    self.id = None
+                    self.title = request.POST.get("title", "").strip()
+                    self.goal = request.POST.get("goal", "").strip()
+                    self.workitems = request.POST.get("workitems", "").strip()
+                    self.blocked = request.POST.get("blocked", "").strip()
+                    self.planned = None
+                    self.started = None
+                    self.finished = None
+                    self.epic = None
+                    # Try to set epic if provided
+                    epic_id = request.POST.get("epic_id")
+                    if epic_id:
+                        try:
+                            self.epic = Epic.objects.get(pk=epic_id)
+                        except Epic.DoesNotExist:
+                            pass
+            
+            story = _S()
+            # Preserve next_url on validation error
+            next_url = request.POST.get('next', '').strip()
+            back_url = reverse('backlog:stories')
+            return render(
+                request,
+                "backlog/refine.html",
+                {
+                    "story": story,
+                    "epics": epics,
+                    "value_sections": value_sections_data,
+                    "cost_sections": cost_sections_data,
+                    "next_url": next_url,
+                    "back_url": back_url,
+                },
+            )
 
-    # create a lightweight story-like object for the template
+    # GET request - create a lightweight story-like object for the template
+    # Check if epic is pre-selected via query parameter
+    preselect_epic = None
+    preselect_epic_id = request.GET.get('epic', '').strip()
+    if preselect_epic_id:
+        try:
+            preselect_epic = Epic.objects.get(pk=preselect_epic_id)
+        except (Epic.DoesNotExist, ValueError):
+            pass
+    
     class _S:
         def __init__(self):
             self.id = None
             self.title = ""
-            self.target = ""
+            self.goal = ""
             self.workitems = ""
-            self.description = ""
+            self.blocked = ""
             self.planned = None
             self.started = None
             self.finished = None
-            self.blocked = ""
-            self.epic = None
+            self.epic = preselect_epic
 
     story = _S()
+    
+    # Get next URL from query param for back link
+    next_url = request.GET.get('next', '').strip()
+    back_url = reverse('backlog:stories')
+    
     return render(
         request,
         "backlog/refine.html",
@@ -388,6 +460,8 @@ def create_story_refine(request):
             "epics": epics,
             "value_sections": value_sections_data,
             "cost_sections": cost_sections_data,
+            "next_url": next_url,
+            "back_url": back_url,
         },
     )
 

@@ -9,6 +9,7 @@
 
 <form method="post" action="" class="page-content-with-fixed-bar" id="epic-form">
   {% csrf_token %}
+  <input type="hidden" name="next" value="{{ next_url }}">
   
   <!-- Big clickable title -->
   <h1 id="title-display" class="title-display" onclick="showTitleInput()">
@@ -33,10 +34,35 @@
 <!-- Fixed save bar at bottom of screen -->
 <div class="fixed-save-bar">
   <button type="submit" form="epic-form">💾 Save Epic</button>
-  <a href="{% url 'backlog:epics' %}" class="back-link">← Back to Epics</a>
+  <a href="{{ next_url|default:back_url }}" class="back-link">← Back to Epics</a>
 </div>
 
 <script>
+// Form change tracking for save button
+var formChanged = false;
+var initialFormState = '';
+var saveButton = null;
+
+function getFormState() {
+  var form = document.getElementById('epic-form');
+  var formData = new FormData(form);
+  var state = [];
+  for (var pair of formData.entries()) {
+    if (pair[0] !== 'csrfmiddlewaretoken') {
+      state.push(pair[0] + '=' + pair[1]);
+    }
+  }
+  return state.sort().join('&');
+}
+
+function updateSaveButton() {
+  var currentState = getFormState();
+  formChanged = (currentState !== initialFormState);
+  if (saveButton) {
+    saveButton.disabled = !formChanged;
+  }
+}
+
 function showTitleInput() {
   document.getElementById('title-display').classList.add('hidden');
   var input = document.getElementById('title-input');
@@ -54,10 +80,21 @@ function hideTitleInput() {
   display.classList.remove('hidden');
 }
 
-// Add form validation
+// Add form validation and change tracking
 document.addEventListener('DOMContentLoaded', function() {
   var form = document.getElementById('epic-form');
   var titleInput = document.getElementById('title-input');
+  
+  // Initialize save button state
+  saveButton = document.querySelector('.fixed-save-bar button[form="epic-form"]');
+  initialFormState = getFormState();
+  if (saveButton) saveButton.disabled = true;
+  
+  // Listen for changes on all form elements
+  form.querySelectorAll('input, select, textarea').forEach(function(el) {
+    el.addEventListener('change', updateSaveButton);
+    el.addEventListener('input', updateSaveButton);
+  });
   
   form.addEventListener('submit', function(e) {
     var title = titleInput.value.trim();
