@@ -82,7 +82,8 @@ jobs:
 
       - name: Test Docker image
         run: |
-          docker run --rm -d --name wos-test \
+          # Run without --rm so we can get logs if it crashes
+          docker run -d --name wos-test \
             -p 8000:8000 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           
@@ -95,7 +96,10 @@ jobs:
             echo "Attempt $attempt/$max_attempts: Checking health endpoint..."
             if curl -fsS http://localhost:8000/backlog/health/ > /dev/null 2>&1; then
               echo "✅ Health check passed!"
-              break
+              docker stop wos-test
+              docker rm wos-test
+              echo "✅ Docker image test passed!"
+              exit 0
             fi
             
             # Check if container is still running
@@ -103,6 +107,7 @@ jobs:
               echo "❌ Container stopped unexpectedly!"
               echo "Container logs:"
               docker logs wos-test 2>&1 || true
+              docker rm wos-test 2>/dev/null || true
               exit 1
             fi
             
@@ -110,15 +115,9 @@ jobs:
             sleep 2
           done
           
-          if [ $attempt -gt $max_attempts ]; then
-            echo "❌ Health check failed after $max_attempts attempts"
-            echo "Container logs:"
-            docker logs wos-test 2>&1 || true
-            docker stop wos-test 2>/dev/null || true
-            exit 1
-          fi
-          
-          # Stop container
-          docker stop wos-test
-          
-          echo "✅ Docker image test passed!"
+          echo "❌ Health check failed after $max_attempts attempts"
+          echo "Container logs:"
+          docker logs wos-test 2>&1 || true
+          docker stop wos-test 2>/dev/null || true
+          docker rm wos-test 2>/dev/null || true
+          exit 1
