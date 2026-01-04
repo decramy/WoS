@@ -29,6 +29,7 @@ urlpatterns = [
     
     # Story URLs
     path('stories/', views.story_list, name='stories'),
+    path('stories/bulk/', views.bulk_action, name='stories_bulk_action'),
     path('story/new/', views.create_story_refine, name='story_create'),
     path('story/<int:pk>/', views.refine_story, name='story_detail'),
     

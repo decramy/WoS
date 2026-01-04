@@ -5,11 +5,13 @@ Handles story CRUD and refinement:
 - refine_story: Full story editing with scores, dependencies, history
 - create_story_refine: Create new story via refine interface
 - story_list: List/filter/sort stories
+- bulk_action: Handle bulk actions on multiple stories
 """
 from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 
 from ..models import (
     CostFactor,
@@ -612,8 +614,118 @@ def story_list(request):
         'selected_labels': label_filter_ctx['selected_labels'],
         'selected_labels_objects': label_filter_ctx['selected_labels_objects'],
         'labels_param': label_filter_ctx['labels_param'],
+        # All label categories for bulk add labels modal
+        'all_label_categories': LabelCategory.objects.prefetch_related('labels').order_by('name'),
     }
     return render(request, 'backlog/stories.html', context)
+
+
+@require_POST
+def bulk_action(request):
+    """Handle bulk actions on multiple stories.
+    
+    Supported actions:
+    - add_labels: Add labels to selected stories
+    - set_review: Set review_required flag on selected stories
+    - clear_review: Clear review_required flag on selected stories
+    - set_blocked: Set blocked reason on selected stories
+    - archive: Archive selected stories
+    - unarchive: Unarchive selected stories
+    - delete: Delete selected stories
+    """
+    action = request.POST.get('action', '')
+    story_ids_str = request.POST.get('story_ids', '')
+    next_url = request.POST.get('next', reverse('backlog:stories'))
+    
+    # Parse story IDs
+    story_ids = []
+    for sid in story_ids_str.split(','):
+        try:
+            story_ids.append(int(sid.strip()))
+        except (ValueError, TypeError):
+            pass
+    
+    if not story_ids:
+        messages.warning(request, '⚠️ No stories selected.')
+        return redirect(next_url)
+    
+    stories = Story.objects.filter(id__in=story_ids)
+    count = stories.count()
+    
+    if count == 0:
+        messages.warning(request, '⚠️ No valid stories found.')
+        return redirect(next_url)
+    
+    if action == 'add_labels':
+        label_ids_str = request.POST.get('label_ids', '')
+        label_ids = []
+        for lid in label_ids_str.split(','):
+            try:
+                label_ids.append(int(lid.strip()))
+            except (ValueError, TypeError):
+                pass
+        
+        if label_ids:
+            labels = Label.objects.filter(id__in=label_ids)
+            label_names = ', '.join(sorted([l.name for l in labels]))
+            for story in stories:
+                # Add labels (don't remove existing)
+                current_labels = set(story.labels.values_list('id', flat=True))
+                new_labels = set(label_ids) - current_labels
+                if new_labels:
+                    story.labels.add(*new_labels)
+                    StoryHistory.objects.create(
+                        story=story,
+                        field_name='Labels',
+                        old_value='(added)',
+                        new_value=label_names
+                    )
+            messages.success(request, f'🏷️ Added labels to {count} stories.')
+        else:
+            messages.warning(request, '⚠️ No labels selected.')
+    
+    elif action == 'set_review':
+        stories.update(review_required=True)
+        messages.success(request, f'🚩 Set review required on {count} stories.')
+    
+    elif action == 'clear_review':
+        stories.update(review_required=False)
+        messages.success(request, f'✅ Cleared review flag from {count} stories.')
+    
+    elif action == 'set_blocked':
+        blocked_reason = request.POST.get('blocked_reason', '').strip()
+        if blocked_reason:
+            for story in stories:
+                old_blocked = story.blocked
+                story.blocked = blocked_reason
+                story.save()
+                if old_blocked != blocked_reason:
+                    StoryHistory.objects.create(
+                        story=story,
+                        field_name='Blocked',
+                        old_value=old_blocked or '(not blocked)',
+                        new_value=blocked_reason
+                    )
+            messages.success(request, f'🚫 Marked {count} stories as blocked.')
+        else:
+            messages.warning(request, '⚠️ No blocked reason provided.')
+    
+    elif action == 'archive':
+        stories.update(archived=True)
+        messages.success(request, f'📦 Archived {count} stories.')
+    
+    elif action == 'unarchive':
+        stories.update(archived=False)
+        messages.success(request, f'📤 Unarchived {count} stories.')
+    
+    elif action == 'delete':
+        stories.delete()
+        messages.success(request, f'🗑️ Deleted {count} stories.')
+    
+    else:
+        messages.warning(request, f'⚠️ Unknown action: {action}')
+    
+    return redirect(next_url)
 
 
 def create_label(request):

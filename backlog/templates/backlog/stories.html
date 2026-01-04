@@ -45,9 +45,40 @@
   <input name="q" placeholder="🔍 Search stories..." value="{{ q }}">
   <button class="btn" type="submit">Filter</button>
 </form>
+
+<!-- Bulk Actions Bar -->
+<div id="bulk-actions-bar" class="bulk-actions-bar" style="display:none;">
+  <div class="bulk-actions-info">
+    <span id="selected-count">0</span> stories selected
+    <button type="button" class="btn-link" onclick="toggleSelectAll(false)">Clear selection</button>
+  </div>
+  <div class="bulk-actions-buttons">
+    <button type="button" class="btn btn-small" onclick="showBulkLabelModal()" title="Add labels to selected stories">🏷️ Add Labels</button>
+    <button type="button" class="btn btn-small" onclick="bulkAction('set_review', true)" title="Flag selected stories for review">🚩 Set Review</button>
+    <button type="button" class="btn btn-small" onclick="bulkAction('clear_review')" title="Clear review flag from selected stories">✅ Clear Review</button>
+    <button type="button" class="btn btn-small" onclick="showBulkBlockedModal()" title="Mark selected stories as blocked">🚫 Mark Blocked</button>
+    {% if show_archived %}
+    <button type="button" class="btn btn-small" onclick="bulkAction('unarchive')" title="Unarchive selected stories">📤 Unarchive</button>
+    {% else %}
+    <button type="button" class="btn btn-small" onclick="bulkAction('archive')" title="Archive selected stories">📦 Archive</button>
+    {% endif %}
+    <button type="button" class="btn btn-small btn-danger" onclick="bulkAction('delete')" title="Delete selected stories">🗑️ Delete</button>
+  </div>
+</div>
+
+<form id="bulk-action-form" method="post" action="{% url 'backlog:stories_bulk_action' %}">
+  {% csrf_token %}
+  <input type="hidden" name="action" id="bulk-action-type" value="">
+  <input type="hidden" name="story_ids" id="bulk-story-ids" value="">
+  <input type="hidden" name="blocked_reason" id="bulk-blocked-reason" value="">
+  <input type="hidden" name="label_ids" id="bulk-label-ids" value="">
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+</form>
+
 <table class="overview-table" style="margin-top:12px;">
   <thead>
     <tr>
+      <th style="width:30px;"><input type="checkbox" id="select-all" onclick="toggleSelectAll(this.checked)" title="Select all"></th>
       <th>Actions</th>
       <th>
         <a href="?{% if q %}q={{ q }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if labels_param %}labels={{ labels_param }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=title&order={% if sort == 'title' and order == 'asc' %}desc{% else %}asc{% endif %}">
@@ -63,13 +94,12 @@
       </th>
       <th title="Story details complete (title, goal, workitems)">📝</th>
       <th title="All WSJF score factors defined">📊</th>
-      <th title="Review required">🚩</th>
-      <th>Labels</th>
     </tr>
   </thead>
   <tbody>
     {% for item in stories %}
-      <tr>
+      <tr data-story-id="{{ item.story.id }}">
+        <td><input type="checkbox" class="story-checkbox" value="{{ item.story.id }}" onchange="updateBulkSelection()"></td>
         <td style="white-space:nowrap;">
           <a href="{% url 'backlog:story_detail' item.story.id %}?next={{ request.get_full_path|urlencode }}" title="Edit story">🔧</a>
           {% if show_archived %}
@@ -100,27 +130,28 @@
             <button type="submit" title="Delete story" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">🗑️</button>
           </form>
         </td>
-        <td><a href="{% url 'backlog:story_detail' item.story.id %}?next={{ request.get_full_path|urlencode }}" class="table-link">{% if item.story.review_required %}🚩 {% endif %}{{ item.story.title }}</a></td>
+        <td>
+          <div class="story-title-cell">
+            <a href="{% url 'backlog:story_detail' item.story.id %}?next={{ request.get_full_path|urlencode }}" class="table-link">{% if item.story.review_required %}<span class="review-flag" title="Review required">🚩</span> {% endif %}{{ item.story.title }}</a>
+            {% if item.story.labels.exists %}
+            <div class="labels-row">
+              {% for label in item.story.labels.all %}
+              <span class="label-shield label-small" style="--label-color: {{ label.category.color }};" title="{{ label.category.name }}: {{ label.name }}">
+                <span class="label-icon">{% render_icon label.category.icon %}</span>
+                <span class="label-text">{{ label.name }}</span>
+              </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </td>
         <td><strong class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|upper }}</strong></td>
         <td style="text-align:center;">{% if item.details_complete %}<span style="color:var(--accent-2);" title="✓ Details complete">✅</span>{% else %}<span style="color:var(--danger);" title="✗ Missing: title, goal or workitems">⚠️</span>{% endif %}</td>
         <td style="text-align:center;">{% if item.scores_complete %}<span style="color:var(--accent-2);" title="✓ All scores defined">✅</span>{% else %}<span style="color:var(--danger);" title="✗ Some scores undefined">⚠️</span>{% endif %}</td>
-        <td style="text-align:center;">{% if item.story.review_required %}<span style="color:var(--warning);" title="Review required">🚩</span>{% else %}—{% endif %}</td>
-        <td>
-          {% if item.story.labels.exists %}
-          <div class="labels-container">
-            {% for label in item.story.labels.all %}
-            <span class="label-shield" style="--label-color: {{ label.category.color }};" title="{{ label.category.name }}: {{ label.name }}">
-              <span class="label-icon">{% render_icon label.category.icon %}</span>
-              <span class="label-text">{{ label.name }}</span>
-            </span>
-            {% endfor %}
-          </div>
-          {% else %}—{% endif %}
-        </td>
       </tr>
     {% empty %}
       <tr>
-        <td colspan="7">
+        <td colspan="6">
           <div class="empty-state">
             <div class="empty-icon">{% if show_archived %}📦{% else %}📋{% endif %}</div>
             <div class="empty-text">No {% if show_archived %}archived {% endif %}stories found</div>
@@ -131,4 +162,193 @@
     {% endfor %}
   </tbody>
 </table>
+
+<!-- Bulk Label Modal -->
+<div id="bulk-label-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🏷️ Add Labels to Selected Stories</h3>
+      <button type="button" class="modal-close" onclick="closeBulkLabelModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p>Select labels to add to the selected stories:</p>
+      <div class="label-select-grid">
+        {% for category in all_label_categories %}
+        <div class="label-category-group">
+          <div class="category-header" style="--cat-color: {{ category.color }};">
+            <span class="category-icon">{% render_icon category.icon %}</span>
+            {{ category.name }}
+          </div>
+          <div class="category-labels">
+            {% for label in category.labels.all %}
+            <label class="label-checkbox">
+              <input type="checkbox" name="bulk_labels" value="{{ label.id }}">
+              <span class="label-shield label-small" style="--label-color: {{ label.category.color }};">
+                <span class="label-text">{{ label.name }}</span>
+              </span>
+            </label>
+            {% empty %}
+            <span class="no-labels">No labels</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeBulkLabelModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" onclick="applyBulkLabels()">Apply Labels</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Blocked Modal -->
+<div id="bulk-blocked-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🚫 Mark Stories as Blocked</h3>
+      <button type="button" class="modal-close" onclick="closeBulkBlockedModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p>Enter the reason why these stories are blocked:</p>
+      <textarea id="blocked-reason-input" placeholder="e.g., Waiting for API, Dependency on external team..." rows="3" style="width:100%;"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeBulkBlockedModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" onclick="applyBulkBlocked()">Mark as Blocked</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function getSelectedStoryIds() {
+  var checkboxes = document.querySelectorAll('.story-checkbox:checked');
+  return Array.from(checkboxes).map(function(cb) { return cb.value; });
+}
+
+function updateBulkSelection() {
+  var selected = getSelectedStoryIds();
+  var bar = document.getElementById('bulk-actions-bar');
+  var countEl = document.getElementById('selected-count');
+  var selectAll = document.getElementById('select-all');
+  var allCheckboxes = document.querySelectorAll('.story-checkbox');
+  
+  countEl.textContent = selected.length;
+  bar.style.display = selected.length > 0 ? 'flex' : 'none';
+  
+  // Update select-all checkbox state
+  if (allCheckboxes.length > 0) {
+    selectAll.checked = selected.length === allCheckboxes.length;
+    selectAll.indeterminate = selected.length > 0 && selected.length < allCheckboxes.length;
+  }
+}
+
+function toggleSelectAll(checked) {
+  var checkboxes = document.querySelectorAll('.story-checkbox');
+  checkboxes.forEach(function(cb) { cb.checked = checked; });
+  updateBulkSelection();
+}
+
+function bulkAction(action, confirm_msg) {
+  var selected = getSelectedStoryIds();
+  if (selected.length === 0) {
+    alert('Please select at least one story.');
+    return;
+  }
+  
+  // Confirmation for destructive actions
+  if (action === 'delete') {
+    if (!confirm('Are you sure you want to delete ' + selected.length + ' stories? This cannot be undone.')) {
+      return;
+    }
+  } else if (action === 'archive') {
+    if (!confirm('Archive ' + selected.length + ' stories?')) {
+      return;
+    }
+  }
+  
+  document.getElementById('bulk-action-type').value = action;
+  document.getElementById('bulk-story-ids').value = selected.join(',');
+  document.getElementById('bulk-action-form').submit();
+}
+
+function showBulkLabelModal() {
+  var selected = getSelectedStoryIds();
+  if (selected.length === 0) {
+    alert('Please select at least one story.');
+    return;
+  }
+  // Clear previous selections
+  document.querySelectorAll('#bulk-label-modal input[name="bulk_labels"]').forEach(function(cb) {
+    cb.checked = false;
+  });
+  document.getElementById('bulk-label-modal').style.display = 'flex';
+}
+
+function closeBulkLabelModal() {
+  document.getElementById('bulk-label-modal').style.display = 'none';
+}
+
+function applyBulkLabels() {
+  var selected = getSelectedStoryIds();
+  var labelCheckboxes = document.querySelectorAll('#bulk-label-modal input[name="bulk_labels"]:checked');
+  var labelIds = Array.from(labelCheckboxes).map(function(cb) { return cb.value; });
+  
+  if (labelIds.length === 0) {
+    alert('Please select at least one label.');
+    return;
+  }
+  
+  document.getElementById('bulk-action-type').value = 'add_labels';
+  document.getElementById('bulk-story-ids').value = selected.join(',');
+  document.getElementById('bulk-label-ids').value = labelIds.join(',');
+  document.getElementById('bulk-action-form').submit();
+}
+
+function showBulkBlockedModal() {
+  var selected = getSelectedStoryIds();
+  if (selected.length === 0) {
+    alert('Please select at least one story.');
+    return;
+  }
+  document.getElementById('blocked-reason-input').value = '';
+  document.getElementById('bulk-blocked-modal').style.display = 'flex';
+}
+
+function closeBulkBlockedModal() {
+  document.getElementById('bulk-blocked-modal').style.display = 'none';
+}
+
+function applyBulkBlocked() {
+  var selected = getSelectedStoryIds();
+  var reason = document.getElementById('blocked-reason-input').value.trim();
+  
+  if (!reason) {
+    alert('Please enter a reason for blocking.');
+    return;
+  }
+  
+  document.getElementById('bulk-action-type').value = 'set_blocked';
+  document.getElementById('bulk-story-ids').value = selected.join(',');
+  document.getElementById('bulk-blocked-reason').value = reason;
+  document.getElementById('bulk-action-form').submit();
+}
+
+// Close modals on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeBulkLabelModal();
+    closeBulkBlockedModal();
+  }
+});
+
+// Close modals when clicking outside
+document.querySelectorAll('.modal').forEach(function(modal) {
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) {
+      modal.style.display = 'none';
+    }
+  });
+});
+</script>
 {% endblock %}

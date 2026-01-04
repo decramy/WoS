@@ -18,7 +18,7 @@ from .dashboard import dashboard
 from .health import health
 from .kanban import kanban_move, kanban_view
 from .report import _calculate_story_score, report_view
-from .stories import create_label, create_story_refine, refine_story, story_list
+from .stories import bulk_action, create_label, create_story_refine, refine_story, story_list
 from .wbs import wbs_add_dependency, wbs_remove_dependency, wbs_view
 from .changelog import changelog
 
@@ -29,6 +29,7 @@ __all__ = [
     'refine_story',
     'create_story_refine',
     'story_list',
+    'bulk_action',
     'create_label',
     # Report
     'report_view',

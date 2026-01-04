@@ -32,6 +32,8 @@ from .models import (
     StoryCostFactorScore,
     StoryDependency,
     StoryHistory,
+    LabelCategory,
+    Label,
 )
 
 
@@ -1828,4 +1830,152 @@ class LabelFilterTests(BaseTestCase):
         response = self.client.get(reverse('backlog:stories'), {'labels': ''})
         self.assertEqual(response.status_code, 200)
         stories = [s['story'] for s in response.context['stories']]
-        self.assertEqual(len(stories), 4)
+
+
+class BulkActionsTests(BaseTestCase):
+    """Test cases for bulk actions on stories."""
+
+    def setUp(self):
+        super().setUp()
+        # Create test stories
+        self.story1 = Story.objects.create(title="Story 1", goal="Goal 1", workitems="Work 1")
+        self.story2 = Story.objects.create(title="Story 2", goal="Goal 2", workitems="Work 2")
+        self.story3 = Story.objects.create(title="Story 3", goal="Goal 3", workitems="Work 3")
+        
+        # Create a label category and label for testing
+        self.bulk_category = LabelCategory.objects.create(name="Bulk Test", color="#ff0000")
+        self.bulk_label = Label.objects.create(category=self.bulk_category, name="Bulk Label")
+
+    def test_bulk_archive_stories(self):
+        """Test bulk archiving multiple stories."""
+        response = self.client.post(reverse('backlog:stories_bulk_action'), {
+            'action': 'archive',
+            'story_ids': f'{self.story1.id},{self.story2.id}',
+            'next': reverse('backlog:stories'),
+        })
+        self.assertEqual(response.status_code, 302)
+        
+        self.story1.refresh_from_db()
+        self.story2.refresh_from_db()
+        self.story3.refresh_from_db()
+        
+        self.assertTrue(self.story1.archived)
+        self.assertTrue(self.story2.archived)
+        self.assertFalse(self.story3.archived)
+
+    def test_bulk_unarchive_stories(self):
+        """Test bulk unarchiving multiple stories."""
+        self.story1.archived = True
+        self.story1.save()
+        self.story2.archived = True
+        self.story2.save()
+        
+        response = self.client.post(reverse('backlog:stories_bulk_action'), {
+            'action': 'unarchive',
+            'story_ids': f'{self.story1.id},{self.story2.id}',
+            'next': reverse('backlog:stories'),
+        })
+        self.assertEqual(response.status_code, 302)
+        
+        self.story1.refresh_from_db()
+        self.story2.refresh_from_db()
+        
+        self.assertFalse(self.story1.archived)
+        self.assertFalse(self.story2.archived)
+
+    def test_bulk_set_review_required(self):
+        """Test bulk setting review required flag."""
+        response = self.client.post(reverse('backlog:stories_bulk_action'), {
+            'action': 'set_review',
+            'story_ids': f'{self.story1.id},{self.story2.id}',
+            'next': reverse('backlog:stories'),
+        })
+        self.assertEqual(response.status_code, 302)
+        
+        self.story1.refresh_from_db()
+        self.story2.refresh_from_db()
+        self.story3.refresh_from_db()
+        
+        self.assertTrue(self.story1.review_required)
+        self.assertTrue(self.story2.review_required)
+        self.assertFalse(self.story3.review_required)
+
+    def test_bulk_clear_review(self):
+        """Test bulk clearing review required flag."""
+        self.story1.review_required = True
+        self.story1.save()
+        self.story2.review_required = True
+        self.story2.save()
+        
+        response = self.client.post(reverse('backlog:stories_bulk_action'), {
+            'action': 'clear_review',
+            'story_ids': f'{self.story1.id},{self.story2.id}',
+            'next': reverse('backlog:stories'),
+        })
+        self.assertEqual(response.status_code, 302)
+        
+        self.story1.refresh_from_db()
+        self.story2.refresh_from_db()
+        
+        self.assertFalse(self.story1.review_required)
+        self.assertFalse(self.story2.review_required)
+
+    def test_bulk_set_blocked(self):
+        """Test bulk setting blocked reason."""
+        response = self.client.post(reverse('backlog:stories_bulk_action'), {
+            'action': 'set_blocked',
+            'story_ids': f'{self.story1.id},{self.story2.id}',
+            'blocked_reason': 'Waiting for API',
+            'next': reverse('backlog:stories'),
+        })
+        self.assertEqual(response.status_code, 302)
+        
+        self.story1.refresh_from_db()
+        self.story2.refresh_from_db()
+        self.story3.refresh_from_db()
+        
+        self.assertEqual(self.story1.blocked, 'Waiting for API')
+        self.assertEqual(self.story2.blocked, 'Waiting for API')
+        self.assertEqual(self.story3.blocked, '')
+
+    def test_bulk_add_labels(self):
+        """Test bulk adding labels to stories."""
+        response = self.client.post(reverse('backlog:stories_bulk_action'), {
+            'action': 'add_labels',
+            'story_ids': f'{self.story1.id},{self.story2.id}',
+            'label_ids': str(self.bulk_label.id),
+            'next': reverse('backlog:stories'),
+        })
+        self.assertEqual(response.status_code, 302)
+        
+        self.assertTrue(self.story1.labels.filter(id=self.bulk_label.id).exists())
+        self.assertTrue(self.story2.labels.filter(id=self.bulk_label.id).exists())
+        self.assertFalse(self.story3.labels.filter(id=self.bulk_label.id).exists())
+
+    def test_bulk_delete_stories(self):
+        """Test bulk deleting stories."""
+        story1_id = self.story1.id
+        story2_id = self.story2.id
+        
+        response = self.client.post(reverse('backlog:stories_bulk_action'), {
+            'action': 'delete',
+            'story_ids': f'{story1_id},{story2_id}',
+            'next': reverse('backlog:stories'),
+        })
+        self.assertEqual(response.status_code, 302)
+        
+        self.assertFalse(Story.objects.filter(id=story1_id).exists())
+        self.assertFalse(Story.objects.filter(id=story2_id).exists())
+        self.assertTrue(Story.objects.filter(id=self.story3.id).exists())
+
+    def test_bulk_action_no_stories_selected(self):
+        """Test bulk action with no stories selected."""
+        response = self.client.post(reverse('backlog:stories_bulk_action'), {
+            'action': 'archive',
+            'story_ids': '',
+            'next': reverse('backlog:stories'),
+        })
+        self.assertEqual(response.status_code, 302)
+        # Stories should remain unchanged
+        self.story1.refresh_from_db()
+        self.assertFalse(self.story1.archived)

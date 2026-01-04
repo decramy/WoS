@@ -73,7 +73,19 @@
     {% for r in rows %}
       <tr data-result="{% if r.result is not None %}{{ r.result }}{% endif %}">
         <td>
-          <a href="{% url 'backlog:story_detail' r.story.id %}" class="table-link">{{ r.story.title|truncatechars:30 }}</a>
+          <div class="story-title-cell">
+            <a href="{% url 'backlog:story_detail' r.story.id %}" class="table-link">{% if r.story.review_required %}<span class="review-flag" title="Review required">🚩</span> {% endif %}{{ r.story.title|truncatechars:30 }}</a>
+            {% if r.story.labels.exists %}
+            <div class="labels-row">
+              {% for label in r.story.labels.all %}
+              <span class="label-shield label-small" style="--label-color: {{ label.category.color }};" title="{{ label.category.name }}: {{ label.name }}">
+                <span class="label-icon">{% render_icon label.category.icon %}</span>
+                <span class="label-text">{{ label.name }}</span>
+              </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
         </td>
         <td class="status-{{ r.story.computed_status }}" data-value="{{ r.story.computed_status }}">
           {{ r.story.computed_status|upper }}

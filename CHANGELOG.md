@@ -5,6 +5,32 @@ All notable changes to WoS (WSJF on Steroids) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-01-04
+
+### Added
+- **Bulk Actions**: Perform actions on multiple stories at once
+  - Select stories with checkboxes (individual or select all)
+  - Bulk action bar appears when stories are selected
+  - Supported actions:
+    - 🏷️ Add Labels: Add labels to selected stories (modal with category grouping)
+    - 🚩 Set Review: Flag selected stories for review
+    - ✅ Clear Review: Remove review flag from selected stories
+    - 🚫 Mark Blocked: Set blocked reason on selected stories (with input modal)
+    - 📦 Archive / 📤 Unarchive: Archive or unarchive selected stories
+    - 🗑️ Delete: Delete selected stories (with confirmation)
+  - History tracking for bulk blocked and label changes
+  - 8 new tests for bulk actions (116 total tests)
+
+### Changed
+- **Story list UI improvements**:
+  - Labels now shown on second line below story title
+  - Review required flag (🚩) shown before story title instead of separate column
+  - Reduced table columns for cleaner layout
+  
+- **Report page UI improvements**:
+  - Labels now shown on second line below story title
+  - Review required flag (🚩) shown before story title
+
 ## [2.0.0] - 2026-01-04
 
 ### Breaking Changes
