@@ -45,6 +45,26 @@
   .story-identity { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
   @media(max-width:600px) { .story-identity { grid-template-columns: 1fr; } }
   
+  /* Two-column layout for story details (goal + work items) */
+  .story-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .story-details-grid .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+  .story-details-grid textarea {
+    flex: 1;
+    min-height: 180px;
+    resize: vertical;
+  }
+  @media(max-width:800px) { 
+    .story-details-grid { grid-template-columns: 1fr; }
+    .story-details-grid textarea { min-height: 120px; }
+  }
+  
   .status-bar { 
     display: flex; 
     gap: 12px; 
@@ -101,6 +121,39 @@
     border-radius: 8px;
     padding: 8px;
     margin: 6px -8px;
+  }
+  
+  /* Collapsible sections */
+  details.collapsible {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+  }
+  details.collapsible summary {
+    padding: 16px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  details.collapsible summary::-webkit-details-marker {
+    display: none;
+  }
+  details.collapsible summary::before {
+    content: '▶';
+    font-size: 10px;
+    transition: transform 0.2s ease;
+  }
+  details.collapsible[open] summary::before {
+    transform: rotate(90deg);
+  }
+  details.collapsible .collapsible-content {
+    padding: 0 20px 20px 20px;
+    border-top: 1px solid var(--border);
   }
 </style>
 
@@ -183,51 +236,52 @@
   <div class="content-section">
     <h3>📝 Story Details</h3>
     <p class="section-hint">Describe what this story aims to achieve and the work involved.</p>
-    <div class="text-fields">
+    <div class="story-details-grid">
       <div class="form-group">
         <label for="story_goal" class="field-title">🎯 Goal</label>
-        <textarea id="story_goal" name="goal" rows="2" placeholder="What outcome do we want to achieve?">{{ story.goal }}</textarea>
+        <textarea id="story_goal" name="goal" rows="8" placeholder="What outcome do we want to achieve?">{{ story.goal }}</textarea>
       </div>
       <div class="form-group">
         <label for="story_workitems" class="field-title">📋 Work Items</label>
-        <textarea id="story_workitems" name="workitems" rows="5" placeholder="List the tasks or acceptance criteria...">{{ story.workitems }}</textarea>
+        <textarea id="story_workitems" name="workitems" rows="8" placeholder="List the tasks or acceptance criteria...">{{ story.workitems }}</textarea>
       </div>
     </div>
   </div>
 
   {% if story.id %}
-  <!-- Dependencies section -->
-  <div class="content-section">
-    <h3>🔗 Dependencies</h3>
-    <p class="section-hint">This story depends on:</p>
-    
-    <!-- Current dependencies -->
-    <div class="dependencies-list" style="margin-bottom:16px;">
-      {% if dependencies %}
-        {% for dep in dependencies %}
-          <div class="dependency-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
-            <span style="flex:1;">
-              <strong>{{ dep.depends_on.title }}</strong>
-              <span style="color:var(--muted);font-size:12px;margin-left:8px;">{{ dep.depends_on.epic.title }}</span>
-              <span class="status-{{ dep.depends_on.computed_status }}" style="font-size:11px;margin-left:8px;text-transform:uppercase;">{{ dep.depends_on.computed_status }}</span>
-            </span>
-            <button type="submit" form="remove-dep-{{ dep.id }}" style="padding:4px 8px;font-size:12px;background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:4px;cursor:pointer;">Remove</button>
-          </div>
-        {% endfor %}
-      {% else %}
-        <p style="color:var(--muted);font-size:13px;padding:12px;background:var(--surface);border-radius:6px;text-align:center;">🔗 No dependencies yet — this story can start anytime!</p>
-      {% endif %}
-    </div>
-    
-    <!-- Add dependency picker -->
-    <div class="add-dependency">
-      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-        <div style="flex:1;min-width:250px;">
-          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">Add dependency:</label>
-          <select id="dependency-select" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel);font-size:13px;">
-            <option value="">Select a story...</option>
-            {% if same_epic_stories %}
-              <optgroup label="Same Epic ({{ story.epic.title }})">
+  <!-- Dependencies section (collapsible) -->
+  <details class="collapsible" {% if dependencies %}open{% endif %}>
+    <summary>🔗 Dependencies {% if dependencies %}<span class="badge">{{ dependencies|length }}</span>{% endif %}</summary>
+    <div class="collapsible-content">
+      <p class="section-hint">This story depends on:</p>
+      
+      <!-- Current dependencies -->
+      <div class="dependencies-list" style="margin-bottom:16px;">
+        {% if dependencies %}
+          {% for dep in dependencies %}
+            <div class="dependency-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
+              <span style="flex:1;">
+                <strong>{{ dep.depends_on.title }}</strong>
+                <span style="color:var(--muted);font-size:12px;margin-left:8px;">{{ dep.depends_on.epic.title }}</span>
+                <span class="status-{{ dep.depends_on.computed_status }}" style="font-size:11px;margin-left:8px;text-transform:uppercase;">{{ dep.depends_on.computed_status }}</span>
+              </span>
+              <button type="submit" form="remove-dep-{{ dep.id }}" style="padding:4px 8px;font-size:12px;background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:4px;cursor:pointer;">Remove</button>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--muted);font-size:13px;padding:12px;background:var(--surface);border-radius:6px;text-align:center;">🔗 No dependencies yet — this story can start anytime!</p>
+        {% endif %}
+      </div>
+      
+      <!-- Add dependency picker -->
+      <div class="add-dependency">
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+          <div style="flex:1;min-width:250px;">
+            <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">Add dependency:</label>
+            <select id="dependency-select" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel);font-size:13px;">
+              <option value="">Select a story...</option>
+              {% if same_epic_stories %}
+                <optgroup label="Same Epic ({{ story.epic.title }})">
                 {% for s in same_epic_stories %}
                   <option value="{{ s.id }}">{{ s.title }} ({{ s.computed_status }})</option>
                 {% endfor %}
@@ -245,29 +299,31 @@
         <button type="button" onclick="addDependency()" style="padding:8px 16px;font-size:13px;background:var(--accent);color:white;border:none;border-radius:6px;cursor:pointer;">Add</button>
       </div>
     </div>
-  </div>
+  </details>
   
-  <!-- Dependents section: Stories that depend on this story -->
-  <div class="content-section">
-    <h3>⬅️ Dependents</h3>
-    <p class="section-hint">Stories that depend on this story:</p>
-    
-    <div class="dependents-list">
-      {% if dependents %}
-        {% for dep in dependents %}
-          <div class="dependency-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
-            <span style="flex:1;">
-              <a href="{% url 'backlog:story_detail' dep.story.id %}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ dep.story.title }}</a>
-              <span style="color:var(--muted);font-size:12px;margin-left:8px;">{{ dep.story.epic.title }}</span>
-              <span class="status-{{ dep.story.computed_status }}" style="font-size:11px;margin-left:8px;text-transform:uppercase;">{{ dep.story.computed_status }}</span>
-            </span>
-          </div>
-        {% endfor %}
-      {% else %}
-        <p style="color:var(--muted);font-size:13px;padding:12px;background:var(--surface);border-radius:6px;text-align:center;">✅ No stories depend on this one</p>
-      {% endif %}
+  <!-- Dependents section (collapsible): Stories that depend on this story -->
+  <details class="collapsible" {% if dependents %}open{% endif %}>
+    <summary>⬅️ Dependents {% if dependents %}<span class="badge">{{ dependents|length }}</span>{% endif %}</summary>
+    <div class="collapsible-content">
+      <p class="section-hint">Stories that depend on this story:</p>
+      
+      <div class="dependents-list">
+        {% if dependents %}
+          {% for dep in dependents %}
+            <div class="dependency-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
+              <span style="flex:1;">
+                <a href="{% url 'backlog:story_detail' dep.story.id %}" style="font-weight:600;color:var(--text);text-decoration:none;">{{ dep.story.title }}</a>
+                <span style="color:var(--muted);font-size:12px;margin-left:8px;">{{ dep.story.epic.title }}</span>
+                <span class="status-{{ dep.story.computed_status }}" style="font-size:11px;margin-left:8px;text-transform:uppercase;">{{ dep.story.computed_status }}</span>
+              </span>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--muted);font-size:13px;padding:12px;background:var(--surface);border-radius:6px;text-align:center;">✅ No stories depend on this one</p>
+        {% endif %}
+      </div>
     </div>
-  </div>
+  </details>
   {% endif %}
 
   <!-- Scoring: Value factors in 3 columns, Cost factors in 1 column -->
