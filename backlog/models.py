@@ -2,8 +2,8 @@
 Models for the WoS (WSJF on Steroids) backlog application.
 
 This module defines the core data models:
-- Epic: Container for related stories
 - Story: Individual work items with goal and workitems
+- LabelCategory/Label: Categorized labels for stories
 - ValueFactorSection/ValueFactor/ValueFactorAnswer: Value scoring dimensions
 - CostFactorSection/CostFactor/CostFactorAnswer: Cost scoring dimensions
 - StoryValueFactorScore/StoryCostFactorScore: Score assignments per story
@@ -20,32 +20,88 @@ from django.dispatch import receiver
 
 
 # =============================================================================
-# Epic and Story Models
+# Label Models
 # =============================================================================
 
 
-class Epic(models.Model):
-    title = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
-    archived = models.BooleanField(default=False)
+class LabelCategory(models.Model):
+    """A category for grouping related labels with shared styling."""
+    name = models.CharField(max_length=100)
+    color = models.CharField(
+        max_length=7, 
+        default="#6b7280",
+        help_text="Hex color code (e.g., #2563eb)"
+    )
+    icon = models.CharField(
+        max_length=10, 
+        default="🏷️",
+        help_text="Emoji or short icon symbol"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = "label category"
+        verbose_name_plural = "label categories"
+        ordering = ['name']
+
     def __str__(self):
-        return self.title
+        return f"{self.icon} {self.name}"
+
+
+class Label(models.Model):
+    """A label that can be attached to stories."""
+    category = models.ForeignKey(
+        LabelCategory, 
+        related_name="labels", 
+        on_delete=models.CASCADE
+    )
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, help_text="Optional description of this label")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "label"
+        verbose_name_plural = "labels"
+        ordering = ['category__name', 'name']
+        unique_together = [['category', 'name']]
+
+    def __str__(self):
+        return f"{self.category.icon} {self.name}"
+
+    @property
+    def color(self):
+        """Get color from parent category."""
+        return self.category.color
+
+    @property
+    def icon(self):
+        """Get icon from parent category."""
+        return self.category.icon
+
+
+# =============================================================================
+# Story Model
+# =============================================================================
 
 
 class Story(models.Model):
-    epic = models.ForeignKey(Epic, related_name="stories", on_delete=models.CASCADE)
+    """A user story representing a unit of work to be prioritized and completed.
+    
+    Stories are scored using WSJF (Weighted Shortest Job First) methodology,
+    with value factors and cost factors determining priority.
+    """
     title = models.CharField(max_length=200)
     goal = models.CharField(max_length=200, blank=True)
     workitems = models.TextField(blank=True)
-    planned = models.DateTimeField(null=True, blank=True)
-    started = models.DateTimeField(null=True, blank=True)
-    finished = models.DateTimeField(null=True, blank=True)
+    labels = models.ManyToManyField(Label, related_name="stories", blank=True)
+    planned = models.DateTimeField(null=True, blank=True, db_index=True)
+    started = models.DateTimeField(null=True, blank=True, db_index=True)
+    finished = models.DateTimeField(null=True, blank=True, db_index=True)
     blocked = models.TextField(blank=True)
-    archived = models.BooleanField(default=False)
-    review_required = models.BooleanField(default=False)
+    archived = models.BooleanField(default=False, db_index=True)
+    review_required = models.BooleanField(default=False, db_index=True)
     STATUS_NEW = 'new'
     STATUS_REFINED = 'refined'
     STATUS_CHOICES = [(STATUS_NEW, 'New'), (STATUS_REFINED, 'Refined')]
@@ -63,6 +119,9 @@ class Story(models.Model):
         - 'planned' if planned datetime is set
         - 'ready' if all text fields and scores are set
         - 'idea' if any score is undefined or any text field is empty
+        
+        Note: For optimal performance, prefetch 'scores' and 'cost_scores' before
+        accessing this property on multiple stories.
         """
         # Priority order: blocked > done > started > planned > ready > idea
         if self.blocked and self.blocked.strip():
@@ -82,19 +141,60 @@ class Story(models.Model):
         if not (has_title and has_goal and has_workitems):
             return 'idea'
         
-        # Check if all value factors have scores
-        all_value_factors = ValueFactor.objects.all()
-        for vf in all_value_factors:
-            if not self.scores.filter(valuefactor=vf).exists():
-                return 'idea'
+        # Use prefetched scores if available (avoids N+1 queries)
+        if hasattr(self, '_prefetched_objects_cache'):
+            # Get IDs of factors that have defined answers from prefetched data
+            story_vf_ids = {s.valuefactor_id for s in self.scores.all() if s.answer_id is not None}
+            story_cf_ids = {s.costfactor_id for s in self.cost_scores.all() if s.answer_id is not None}
+        else:
+            # Fallback to direct queries if not prefetched
+            story_vf_ids = set(self.scores.filter(answer__isnull=False).values_list('valuefactor_id', flat=True))
+            story_cf_ids = set(self.cost_scores.filter(answer__isnull=False).values_list('costfactor_id', flat=True))
         
-        # Check if all cost factors have scores
-        all_cost_factors = CostFactor.objects.all()
-        for cf in all_cost_factors:
-            if not self.cost_scores.filter(costfactor=cf).exists():
-                return 'idea'
+        # Get all factor IDs (cached at class level for performance)
+        all_vf_ids = Story._get_all_value_factor_ids()
+        all_cf_ids = Story._get_all_cost_factor_ids()
+        
+        # Check if all factors have scores
+        if not (all_vf_ids <= story_vf_ids and all_cf_ids <= story_cf_ids):
+            return 'idea'
         
         return 'ready'
+    
+    # Class-level cache for factor IDs to avoid repeated queries
+    _cached_value_factor_ids = None
+    _cached_cost_factor_ids = None
+    
+    @classmethod
+    def _get_all_value_factor_ids(cls):
+        """Get all value factor IDs (cached at class level)."""
+        if cls._cached_value_factor_ids is None:
+            cls._cached_value_factor_ids = set(ValueFactor.objects.values_list('id', flat=True))
+        return cls._cached_value_factor_ids
+    
+    @classmethod
+    def _get_all_cost_factor_ids(cls):
+        """Get all cost factor IDs (cached at class level)."""
+        if cls._cached_cost_factor_ids is None:
+            cls._cached_cost_factor_ids = set(CostFactor.objects.values_list('id', flat=True))
+        return cls._cached_cost_factor_ids
+    
+    @classmethod
+    def clear_factor_cache(cls):
+        """Clear the cached factor IDs (call after adding/removing factors)."""
+        cls._cached_value_factor_ids = None
+        cls._cached_cost_factor_ids = None
+
+    class Meta:
+        verbose_name = "story"
+        verbose_name_plural = "stories"
+        ordering = ['title']
+        # Single-field indexes are defined on fields using db_index=True
+        # Additional composite indexes for common query patterns
+        indexes = [
+            models.Index(fields=['archived', 'status'], name='story_archived_status_idx'),
+            models.Index(fields=['archived', 'created_at'], name='story_archived_created_idx'),
+        ]
 
     def save(self, *args, **kwargs):
         """Auto-update status based on goal and workitems fields."""
@@ -289,23 +389,25 @@ def ensure_scores_for_story(sender, instance: Story, created, **kwargs):
     Creates StoryValueFactorScore and StoryCostFactorScore records for each
     factor, with answer=None (undefined). This ensures all factors are tracked
     while clearly distinguishing "not yet scored" from an explicit score of 0.
+    
+    Uses bulk_create for efficiency.
     """
     if not created:
         return
-    # For each ValueFactor create a StoryValueFactorScore with answer=None (undefined)
-    for vf in ValueFactor.objects.all():
-        StoryValueFactorScore.objects.get_or_create(
-            story=instance,
-            valuefactor=vf,
-            defaults={"answer": None},
-        )
-    # For each CostFactor create a StoryCostFactorScore with answer=None (undefined)
-    for cf in CostFactor.objects.all():
-        StoryCostFactorScore.objects.get_or_create(
-            story=instance,
-            costfactor=cf,
-            defaults={"answer": None},
-        )
+    
+    # Bulk create value scores
+    value_factor_ids = list(ValueFactor.objects.values_list('id', flat=True))
+    StoryValueFactorScore.objects.bulk_create([
+        StoryValueFactorScore(story=instance, valuefactor_id=vf_id, answer=None)
+        for vf_id in value_factor_ids
+    ], ignore_conflicts=True)
+    
+    # Bulk create cost scores
+    cost_factor_ids = list(CostFactor.objects.values_list('id', flat=True))
+    StoryCostFactorScore.objects.bulk_create([
+        StoryCostFactorScore(story=instance, costfactor_id=cf_id, answer=None)
+        for cf_id in cost_factor_ids
+    ], ignore_conflicts=True)
 
 
 class StoryDependency(models.Model):

@@ -1,0 +1,145 @@
+{% load icon_tags %}
+{# Reusable label filter component with per-category dropdowns #}
+{# Required context: label_categories, selected_labels, selected_labels_objects, labels_param #}
+
+{% if label_categories %}
+<div class="label-filters-container">
+  {% for cat_data in label_categories %}
+  {% with cat=cat_data.category %}
+  {# Count how many labels from this category are selected #}
+  <div class="label-filter-dropdown" data-category="{{ cat.id }}">
+    <button type="button" class="label-filter-btn {% for label in cat_data.labels %}{% if label.id in selected_labels %}has-selected{% endif %}{% endfor %}" onclick="toggleCategoryDropdown(this, {{ cat.id }})">
+      <span class="cat-color" style="background: {{ cat.color }};"></span>
+      {% if cat.icon %}<span class="cat-icon">{% render_icon cat.icon %}</span>{% endif %}
+      <span class="cat-name">{{ cat.name }}</span>
+      {% for label in cat_data.labels %}{% if label.id in selected_labels %}<span class="badge cat-badge-{{ cat.id }}" style="display:inline;">1</span>{% endif %}{% endfor %}
+      <span class="filter-icon">▼</span>
+    </button>
+    <div class="label-filter-content" id="dropdown-{{ cat.id }}">
+      {% for label in cat_data.labels %}
+      <label class="label-filter-item">
+        <input type="checkbox" 
+               data-label-id="{{ label.id }}" 
+               data-category-id="{{ cat.id }}"
+               {% if label.id in selected_labels %}checked{% endif %}
+               onchange="toggleLabel({{ label.id }})">
+        <span class="label-name">{{ label.name }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endwith %}
+  {% endfor %}
+</div>
+
+{# Display applied labels with remove buttons #}
+{% if selected_labels_objects %}
+<div class="applied-labels-container">
+  {% for label in selected_labels_objects %}
+  <span class="applied-label-chip" data-label-id="{{ label.id }}">
+    <span class="chip-color" style="background: {{ label.category.color }};"></span>
+    {% if label.category.icon %}<span class="chip-icon">{% render_icon label.category.icon %}</span>{% endif %}
+    <span class="chip-category">{{ label.category.name }}:</span>
+    <span class="chip-name">{{ label.name }}</span>
+    <span class="chip-remove" onclick="removeLabel({{ label.id }})" title="Remove filter">×</span>
+  </span>
+  {% endfor %}
+  {% if selected_labels_objects|length > 1 %}
+  <button type="button" class="clear-all-labels" onclick="clearAllLabels()">Clear All</button>
+  {% endif %}
+</div>
+{% endif %}
+
+{# Hidden input to store the selected labels for form submission #}
+<input type="hidden" name="labels" id="labels-hidden-input" value="{{ labels_param }}">
+
+<script>
+// Store current selected labels
+let selectedLabels = new Set([{% for label in selected_labels_objects %}{{ label.id }}{% if not forloop.last %}, {% endif %}{% endfor %}]);
+
+// Toggle dropdown visibility
+function toggleCategoryDropdown(btn, categoryId) {
+  const content = document.getElementById('dropdown-' + categoryId);
+  const wasShown = content.classList.contains('show');
+  
+  // Close all dropdowns first
+  document.querySelectorAll('.label-filter-content').forEach(el => el.classList.remove('show'));
+  
+  // Toggle this one
+  if (!wasShown) {
+    content.classList.add('show');
+    
+    // Close when clicking outside
+    function closeDropdown(e) {
+      if (!btn.contains(e.target) && !content.contains(e.target)) {
+        content.classList.remove('show');
+        document.removeEventListener('click', closeDropdown);
+      }
+    }
+    setTimeout(() => document.addEventListener('click', closeDropdown), 0);
+  }
+}
+
+// Toggle a label selection and immediately apply
+function toggleLabel(labelId) {
+  if (selectedLabels.has(labelId)) {
+    selectedLabels.delete(labelId);
+  } else {
+    selectedLabels.add(labelId);
+  }
+  applyLabelFilter();
+}
+
+// Remove a specific label
+function removeLabel(labelId) {
+  selectedLabels.delete(labelId);
+  applyLabelFilter();
+}
+
+// Clear all labels
+function clearAllLabels() {
+  selectedLabels.clear();
+  applyLabelFilter();
+}
+
+// Apply the filter by updating URL
+function applyLabelFilter() {
+  const labelsValue = Array.from(selectedLabels).join(',');
+  const url = new URL(window.location.href);
+  
+  if (labelsValue) {
+    url.searchParams.set('labels', labelsValue);
+  } else {
+    url.searchParams.delete('labels');
+  }
+  
+  window.location.href = url.toString();
+}
+
+// Update badge counts for each category
+function updateBadgeCounts() {
+  document.querySelectorAll('.label-filter-dropdown').forEach(dropdown => {
+    const categoryId = dropdown.dataset.category;
+    const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]:checked');
+    const btn = dropdown.querySelector('.label-filter-btn');
+    const badge = btn.querySelector('.badge');
+    
+    if (checkboxes.length > 0) {
+      btn.classList.add('has-selected');
+      if (badge) {
+        badge.textContent = checkboxes.length;
+        badge.style.display = 'inline';
+      }
+    } else {
+      btn.classList.remove('has-selected');
+      if (badge) {
+        badge.style.display = 'none';
+      }
+    }
+  });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', updateBadgeCounts);
+</script>
+{% endif %}

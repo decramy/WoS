@@ -2,11 +2,8 @@
 URL configuration for the backlog application.
 
 URL Structure:
-    /backlog/               - Redirect to epics list
+    /backlog/               - Redirect to dashboard
     /backlog/dashboard/     - Dashboard for stories needing attention
-    /backlog/epics/         - Epic list (overview)
-    /backlog/epic/new/      - Create new epic
-    /backlog/epic/<id>/     - Epic detail/edit page
     /backlog/stories/       - Story list
     /backlog/story/new/     - Create new story
     /backlog/story/<id>/    - Story detail/edit page (refine)
@@ -30,11 +27,6 @@ urlpatterns = [
     # Dashboard
     path('dashboard/', views.dashboard, name='dashboard'),
     
-    # Epic URLs
-    path('epics/', views.overview, name='epics'),
-    path('epic/new/', views.create_epic, name='epic_create'),
-    path('epic/<int:pk>/', views.edit_epic, name='epic_detail'),
-    
     # Story URLs
     path('stories/', views.story_list, name='stories'),
     path('story/new/', views.create_story_refine, name='story_create'),
@@ -47,6 +39,9 @@ urlpatterns = [
     path('wbs/', views.wbs_view, name='wbs'),
     path('wbs/add-dependency/', views.wbs_add_dependency, name='wbs_add_dependency'),
     path('wbs/remove-dependency/', views.wbs_remove_dependency, name='wbs_remove_dependency'),
+    
+    # Labels API
+    path('labels/create/', views.create_label, name='create_label'),
     
     # Utility
     path('health/', views.health, name='health'),

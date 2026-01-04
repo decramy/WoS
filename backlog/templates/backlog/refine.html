@@ -1,4 +1,5 @@
 {% extends 'backlog/base.html' %}
+{% load icon_tags %}
 
 {% block title %}Refine Story — {{ story.title }}{% endblock %}
 
@@ -155,6 +156,31 @@
     padding: 0 20px 20px 20px;
     border-top: 1px solid var(--border);
   }
+  
+  /* Label picker styles */
+  .label-checkbox {
+    transition: all 0.15s ease;
+  }
+  .label-checkbox:hover {
+    background: var(--panel) !important;
+    border-color: var(--accent) !important;
+  }
+  .label-checkbox:has(input:checked) {
+    background: var(--panel) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+  }
+  .label-checkbox:has(input:checked) .label-shield {
+    opacity: 1;
+  }
+  .label-checkbox:not(:has(input:checked)) .label-shield {
+    opacity: 0.6;
+  }
+  .add-label-btn:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    background: var(--surface) !important;
+  }
 </style>
 
 <div class="page-hint">
@@ -173,22 +199,6 @@
     {% if story.title %}{{ story.title }}{% else %}Click to add title...{% endif %}
   </h1>
   <input type="text" id="title-input" class="story-title-input" name="title" value="{{ story.title }}" placeholder="Story title..." onblur="hideTitleInput()">
-
-  <!-- Epic selector in a box -->
-  <div class="content-section">
-    <h3>📁 Epic</h3>
-    <p class="section-hint">Which epic does this story belong to?</p>
-    <select id="story_epic" name="epic_id" style="width:100%;max-width:400px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:14px;">
-      <option value="">Choose epic...</option>
-      {% if epics %}
-        {% for e in epics %}
-          <option value="{{ e.id }}" {% if story.epic and e.id == story.epic.id %}selected{% endif %}>{{ e.title }}</option>
-        {% endfor %}
-      {% else %}
-        <option disabled>No epics available</option>
-      {% endif %}
-    </select>
-  </div>
 
   {% if story.id %}
   <!-- Status Bar: computed status + dates + blocked + review -->
@@ -248,6 +258,73 @@
     </div>
   </div>
 
+  <!-- Labels section -->
+  {% if label_categories %}
+  <details class="collapsible" {% if story_labels %}open{% endif %}>
+    <summary>🏷️ Labels {% if story_labels %}<span class="badge">{{ story_labels|length }}</span>{% endif %}</summary>
+    <div class="collapsible-content">
+      <p class="section-hint">Categorize this story with labels.</p>
+      <div class="labels-picker" id="labels-picker">
+        {% for cat in label_categories %}
+        <div class="label-category-group" data-category-id="{{ cat.id }}" data-category-color="{{ cat.color }}" data-category-icon="{{ cat.icon }}" data-category-icon-is-mdi="{% if cat.icon|is_mdi %}true{% else %}false{% endif %}" style="margin-bottom: 12px;">
+          <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
+            <span class="category-icon-badge" style="background: {{ cat.color }}; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px;">{% render_icon cat.icon %}</span>
+            {{ cat.name }}
+            <button type="button" class="add-label-btn" onclick="showAddLabelForm(this.closest('.label-category-group'))" style="margin-left: auto; background: none; border: 1px dashed var(--border); border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--muted); cursor: pointer;" title="Add new label to {{ cat.name }}">+ Add</button>
+          </div>
+          <div class="label-list" style="display: flex; flex-wrap: wrap; gap: 6px;">
+            {% for label in cat.labels.all %}
+            <label class="label-checkbox" style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); transition: all 0.15s;">
+              <input type="checkbox" name="labels" value="{{ label.id }}" {% if label.id in story_labels %}checked{% endif %} style="display: none;">
+              <span class="label-shield" style="--label-color: {{ cat.color }};">
+                <span class="label-icon">{% render_icon cat.icon %}</span>
+                <span class="label-text">{{ label.name }}</span>
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        {% empty %}
+        <p style="color: var(--muted); font-size: 13px;">No label categories defined. <a href="/admin/backlog/labelcategory/add/" target="_blank">Create categories in admin</a> first.</p>
+        {% endfor %}
+      </div>
+      
+      <!-- Add Label Modal -->
+      <div id="add-label-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: var(--panel); border-radius: 12px; padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+          <h4 style="margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
+            🏷️ Create New Label
+          </h4>
+          <p style="margin: 0 0 16px 0; font-size: 13px; color: var(--muted);">
+            in category: <span id="modal-cat-icon" style="margin-left: 4px;"></span> <strong id="modal-cat-name" style="color: var(--text);"></strong>
+          </p>
+          <input type="hidden" id="new-label-category-id">
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px;">Label name</label>
+            <input type="text" id="new-label-name" placeholder="e.g. Backend, Frontend, Urgent..." style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; box-sizing: border-box;">
+          </div>
+          <p style="font-size: 11px; color: var(--muted); margin: 0 0 12px 0;">The label will inherit the category's color and icon.</p>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button type="button" onclick="hideAddLabelForm()" style="padding: 8px 16px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; cursor: pointer;">Cancel</button>
+            <button type="button" onclick="createLabel()" style="padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer;">Create Label</button>
+          </div>
+          <p id="label-error" style="color: var(--danger); font-size: 12px; margin: 8px 0 0 0; display: none;"></p>
+        </div>
+      </div>
+    </div>
+  </details>
+  {% else %}
+  <details class="collapsible">
+    <summary>🏷️ Labels</summary>
+    <div class="collapsible-content">
+      <p style="color: var(--muted); font-size: 13px; text-align: center; padding: 12px;">
+        No label categories defined yet.<br>
+        <a href="/admin/backlog/labelcategory/add/" target="_blank" style="color: var(--accent);">Create categories in admin</a> to start using labels.
+      </p>
+    </div>
+  </details>
+  {% endif %}
+
   {% if story.id %}
   <!-- Dependencies section (collapsible) -->
   <details class="collapsible" {% if dependencies %}open{% endif %}>
@@ -262,7 +339,6 @@
             <div class="dependency-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;">
               <span style="flex:1;">
                 <strong>{{ dep.depends_on.title }}</strong>
-                <span style="color:var(--muted);font-size:12px;margin-left:8px;">{{ dep.depends_on.epic.title }}</span>
                 <span class="status-{{ dep.depends_on.computed_status }}" style="font-size:11px;margin-left:8px;text-transform:uppercase;">{{ dep.depends_on.computed_status }}</span>
               </span>
               <button type="submit" form="remove-dep-{{ dep.id }}" style="padding:4px 8px;font-size:12px;background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:4px;cursor:pointer;">Remove</button>
@@ -280,20 +356,9 @@
             <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">Add dependency:</label>
             <select id="dependency-select" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--panel);font-size:13px;">
               <option value="">Select a story...</option>
-              {% if same_epic_stories %}
-                <optgroup label="Same Epic ({{ story.epic.title }})">
-                {% for s in same_epic_stories %}
-                  <option value="{{ s.id }}">{{ s.title }} ({{ s.computed_status }})</option>
-                {% endfor %}
-              </optgroup>
-            {% endif %}
-            {% for epic_group in other_epics_stories %}
-              <optgroup label="{{ epic_group.epic.title }}">
-                {% for s in epic_group.stories %}
-                  <option value="{{ s.id }}">{{ s.title }} ({{ s.computed_status }})</option>
-                {% endfor %}
-              </optgroup>
-            {% endfor %}
+              {% for s in other_stories %}
+                <option value="{{ s.id }}">{{ s.title }} ({{ s.computed_status }})</option>
+              {% endfor %}
           </select>
         </div>
         <button type="button" onclick="addDependency()" style="padding:8px 16px;font-size:13px;background:var(--accent);color:white;border:none;border-radius:6px;cursor:pointer;">Add</button>
@@ -632,6 +697,125 @@ function addDependency() {
   document.getElementById('add-dep-story-id').value = storyId;
   form.submit();
 }
+
+// Label creation functions
+var currentLabelCategory = null;
+var currentLabelColor = null;
+var currentLabelIcon = null;
+var currentLabelIconIsMdi = false;
+
+function renderIcon(icon, isMdi) {
+  if (isMdi || (icon && icon.startsWith('mdi-'))) {
+    var iconClass = icon.startsWith('mdi-') ? 'mdi ' + icon : icon;
+    return '<span class="' + iconClass + '"></span>';
+  }
+  return icon || '';
+}
+
+function showAddLabelForm(categoryGroup) {
+  var categoryId = categoryGroup.dataset.categoryId;
+  var categoryName = categoryGroup.querySelector('.category-icon-badge').nextSibling.textContent.trim();
+  var color = categoryGroup.dataset.categoryColor;
+  var icon = categoryGroup.dataset.categoryIcon;
+  var isMdi = categoryGroup.dataset.categoryIconIsMdi === 'true';
+  
+  currentLabelCategory = categoryId;
+  currentLabelColor = color;
+  currentLabelIcon = icon;
+  currentLabelIconIsMdi = isMdi;
+  
+  document.getElementById('new-label-category-id').value = categoryId;
+  document.getElementById('modal-cat-name').textContent = categoryName;
+  document.getElementById('modal-cat-icon').innerHTML = '<span style="background: ' + color + '; color: white; padding: 2px 8px; border-radius: 4px;">' + renderIcon(icon, isMdi) + '</span>';
+  document.getElementById('new-label-name').value = '';
+  document.getElementById('label-error').style.display = 'none';
+  document.getElementById('add-label-modal').style.display = 'flex';
+  setTimeout(function() {
+    document.getElementById('new-label-name').focus();
+  }, 100);
+}
+
+function hideAddLabelForm() {
+  document.getElementById('add-label-modal').style.display = 'none';
+  currentLabelCategory = null;
+}
+
+function createLabel() {
+  var labelName = document.getElementById('new-label-name').value.trim();
+  var categoryId = document.getElementById('new-label-category-id').value;
+  var errorEl = document.getElementById('label-error');
+  
+  if (!labelName) {
+    errorEl.textContent = 'Please enter a label name';
+    errorEl.style.display = 'block';
+    return;
+  }
+  
+  // Get CSRF token
+  var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  
+  fetch('{% url "backlog:create_label" %}', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken
+    },
+    body: JSON.stringify({
+      category_id: categoryId,
+      name: labelName
+    })
+  })
+  .then(function(response) { return response.json(); })
+  .then(function(data) {
+    if (data.success) {
+      // Add the new label to the UI
+      var categoryGroup = document.querySelector('.label-category-group[data-category-id="' + categoryId + '"]');
+      var labelList = categoryGroup.querySelector('.label-list');
+      
+      var newLabel = document.createElement('label');
+      newLabel.className = 'label-checkbox';
+      newLabel.style = 'display: inline-flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); transition: all 0.15s;';
+      newLabel.innerHTML = '<input type="checkbox" name="labels" value="' + data.label_id + '" checked style="display: none;">' +
+        '<span class="label-shield" style="--label-color: ' + currentLabelColor + ';">' +
+        '<span class="label-icon">' + renderIcon(currentLabelIcon, currentLabelIconIsMdi) + '</span>' +
+        '<span class="label-text">' + data.label_name + '</span>' +
+        '</span>';
+      
+      labelList.appendChild(newLabel);
+      hideAddLabelForm();
+      
+      // Mark form as changed
+      if (typeof formChanged !== 'undefined') {
+        formChanged = true;
+        var saveBtn = document.getElementById('save-btn');
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    } else {
+      errorEl.textContent = data.error || 'Failed to create label';
+      errorEl.style.display = 'block';
+    }
+  })
+  .catch(function(err) {
+    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.style.display = 'block';
+  });
+}
+
+// Close modal on escape key or clicking outside
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') hideAddLabelForm();
+});
+document.getElementById('add-label-modal')?.addEventListener('click', function(e) {
+  if (e.target === this) hideAddLabelForm();
+});
+
+// Submit label on Enter key
+document.getElementById('new-label-name')?.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    createLabel();
+  }
+});
 </script>
 
 <!-- Hidden forms for dependency actions -->

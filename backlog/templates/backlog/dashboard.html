@@ -63,7 +63,6 @@
     <thead>
       <tr>
         <th>Story</th>
-        <th>Epic</th>
         <th>Status</th>
         <th>Created</th>
         <th>Action</th>
@@ -73,7 +72,6 @@
       {% for item in review_required %}
       <tr>
         <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
-        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td><span class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|title }}</span></td>
         <td class="text-muted">{{ item.story.created_at|date:"M d, Y" }}</td>
         <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="btn btn-small">Review →</a></td>
@@ -102,7 +100,6 @@
     <thead>
       <tr>
         <th>Story</th>
-        <th>Epic</th>
         <th>Status</th>
         <th>Missing</th>
         <th>Action</th>
@@ -112,7 +109,6 @@
       {% for item in needs_scoring %}
       <tr>
         <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
-        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td><span class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|title }}</span></td>
         <td class="text-muted">
           {% if item.missing_value_count %}{{ item.missing_value_count }} value{% endif %}
@@ -145,7 +141,6 @@
     <thead>
       <tr>
         <th>Story</th>
-        <th>Epic</th>
         <th>Missing</th>
         <th>Action</th>
       </tr>
@@ -154,7 +149,6 @@
       {% for item in needs_refinement %}
       <tr>
         <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
-        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td class="text-muted">
           {% for field in item.missing %}
             {{ field|title }}{% if not forloop.last %}, {% endif %}
@@ -190,7 +184,6 @@
     <thead>
       <tr>
         <th>Story</th>
-        <th>Epic</th>
         <th>Status</th>
         <th>Days</th>
         <th>Reason</th>
@@ -201,7 +194,6 @@
       {% for item in rotting_stories %}
       <tr class="{% if item.reason == 'blocked' %}row-danger{% elif item.reason == 'started' %}row-warning{% else %}row-info{% endif %}">
         <td><a href="{% url 'backlog:story_detail' item.story.id %}" class="table-link">{{ item.story.title|truncatechars:50 }}</a></td>
-        <td>{% if item.story.epic %}<a href="{% url 'backlog:epic_detail' item.story.epic.id %}" class="table-link">{{ item.story.epic.title|truncatechars:30 }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td><span class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|title }}</span></td>
         <td><strong>{{ item.days }}</strong> days</td>
         <td>
@@ -249,14 +241,7 @@
       <div class="housekeeping-items">
         {% for item in issue.items %}
         <div class="housekeeping-item">
-          {% if issue.type == 'orphan_stories' %}
-            <span class="item-title">{{ item.title|truncatechars:40 }}</span>
-            <span class="item-meta">ID: {{ item.id }} | Epic ID: {{ item.epic_id }} (deleted)</span>
-          {% elif issue.type == 'empty_epics' %}
-            <a href="{% url 'backlog:epic_detail' item.id %}" class="item-link">{{ item.title|truncatechars:40 }}</a>
-          {% else %}
-            {{ item }}
-          {% endif %}
+          {{ item }}
         </div>
         {% endfor %}
         {% if issue.count > 10 %}
@@ -273,14 +258,6 @@
           🧹 Clean Up
         </button>
       </form>
-      {% elif issue.type == 'orphan_stories' %}
-      <div class="housekeeping-action">
-        <span class="action-hint">⚠️ Requires manual reassignment to a new epic</span>
-      </div>
-      {% elif issue.type == 'empty_epics' %}
-      <div class="housekeeping-action">
-        <span class="action-hint">ℹ️ Consider adding stories or archiving these epics</span>
-      </div>
       {% endif %}
     </div>
     {% endfor %}
@@ -321,18 +298,6 @@
           <span class="stat-label">Archived Stories</span>
           <span class="stat-value text-muted">{{ statistics.archived_stories }}</span>
         </div>
-        <div class="stat-row">
-          <span class="stat-label">Total Epics</span>
-          <span class="stat-value">{{ statistics.total_epics }}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Active Epics</span>
-          <span class="stat-value">{{ statistics.active_epics }}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Archived Epics</span>
-          <span class="stat-value text-muted">{{ statistics.archived_epics }}</span>
-        </div>
       </div>
     </div>
     
@@ -350,24 +315,6 @@
         </div>
         {% empty %}
         <div class="stat-empty">No active stories</div>
-        {% endfor %}
-      </div>
-    </div>
-    
-    <!-- Biggest Epics -->
-    <div class="stat-card stat-epics">
-      <div class="stat-header">
-        <span class="stat-icon">🏆</span>
-        <span class="stat-title">Biggest Epics</span>
-      </div>
-      <div class="stat-content">
-        {% for item in statistics.biggest_epics %}
-        <div class="stat-row">
-          <span class="stat-label"><a href="{% url 'backlog:epic_detail' item.epic.id %}" class="stat-link">{{ item.epic.title|truncatechars:25 }}</a></span>
-          <span class="stat-value">{{ item.story_count }} stories</span>
-        </div>
-        {% empty %}
-        <div class="stat-empty">No epics with stories</div>
         {% endfor %}
       </div>
     </div>

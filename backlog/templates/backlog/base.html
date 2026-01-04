@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/light.css' %}">
     <link rel="stylesheet" href="{% static 'css/dark.css' %}">
+    <!-- Material Design Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
 </head>
 <body>
     <header>
@@ -19,7 +21,6 @@
             <nav class="main-nav">
                 <a class="btn" href="{% url 'admin:index' %}" title="Django Admin">⚙️ Admin</a>
                 <a class="btn" href="{% url 'backlog:dashboard' %}" title="Stories needing attention">📊 Dashboard</a>
-                <a class="btn" href="{% url 'backlog:epics' %}" title="Manage your epics">📁 Epics</a>
                 <a class="btn" href="{% url 'backlog:stories' %}" title="View all stories">📋 Stories</a>
                 <a class="btn" href="{% url 'backlog:report' %}" title="WSJF Score Report">📈 Report</a>
                 <a class="btn" href="{% url 'backlog:kanban' %}" title="Kanban Board">📌 Kanban</a>

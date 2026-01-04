@@ -6,7 +6,7 @@ Shows stories that need attention:
 - Needs Refinement: Stories missing goal or workitems
 - Rotting Stories: Stories stuck in started/planned for too long
 - Review Required: Stories flagged for review
-- Housekeeping: Data integrity issues (orphaned stories, orphaned scores, etc.)
+- Housekeeping: Data integrity issues (orphaned scores, etc.)
 """
 from django.contrib import messages
 from django.db.models import Count
@@ -15,7 +15,6 @@ from django.utils import timezone
 
 from ..models import (
     CostFactor,
-    Epic,
     Story,
     StoryCostFactorScore,
     StoryDependency,
@@ -94,7 +93,7 @@ def dashboard(request):
             return redirect('backlog:dashboard')
     
     # Get all non-archived stories
-    stories = Story.objects.filter(archived=False).select_related('epic').prefetch_related(
+    stories = Story.objects.filter(archived=False).prefetch_related(
         'scores', 'cost_scores'
     )
     
@@ -190,24 +189,12 @@ def dashboard(request):
         'total_issues': 0,
     }
     
-    # 1. Orphaned stories (stories with epic_id pointing to non-existent epic)
-    valid_epic_ids = set(Epic.objects.values_list('id', flat=True))
-    orphan_stories = Story.objects.exclude(epic_id__in=valid_epic_ids)
-    if orphan_stories.exists():
-        housekeeping['issues'].append({
-            'type': 'orphan_stories',
-            'icon': '👻',
-            'title': 'Orphaned Stories',
-            'description': 'Stories whose epic has been deleted',
-            'count': orphan_stories.count(),
-            'items': list(orphan_stories[:10]),  # Show first 10
-            'action': None,  # Can't auto-fix - need to reassign manually
-            'severity': 'warning',
-        })
+    # Reuse all_value_factors and all_cost_factors loaded earlier for story scoring
+    # Get all story IDs (including archived) for orphan detection
+    all_story_ids = set(Story.objects.values_list('id', flat=True))
     
-    # 2. Orphaned value factor scores (scores for deleted stories)
-    valid_story_ids = set(Story.objects.values_list('id', flat=True))
-    orphan_value_scores = StoryValueFactorScore.objects.exclude(story_id__in=valid_story_ids).count()
+    # 1. Orphaned value factor scores (scores for deleted stories)
+    orphan_value_scores = StoryValueFactorScore.objects.exclude(story_id__in=all_story_ids).count()
     if orphan_value_scores > 0:
         housekeeping['issues'].append({
             'type': 'orphan_value_scores',
@@ -220,8 +207,8 @@ def dashboard(request):
             'severity': 'info',
         })
     
-    # 3. Orphaned cost factor scores (scores for deleted stories)
-    orphan_cost_scores = StoryCostFactorScore.objects.exclude(story_id__in=valid_story_ids).count()
+    # 2. Orphaned cost factor scores (scores for deleted stories)
+    orphan_cost_scores = StoryCostFactorScore.objects.exclude(story_id__in=all_story_ids).count()
     if orphan_cost_scores > 0:
         housekeeping['issues'].append({
             'type': 'orphan_cost_scores',
@@ -234,9 +221,9 @@ def dashboard(request):
             'severity': 'info',
         })
     
-    # 4. Orphaned dependencies (dependencies referencing deleted stories)
-    orphan_deps_from = StoryDependency.objects.exclude(story_id__in=valid_story_ids).count()
-    orphan_deps_to = StoryDependency.objects.exclude(depends_on_id__in=valid_story_ids).count()
+    # 3. Orphaned dependencies (dependencies referencing deleted stories)
+    orphan_deps_from = StoryDependency.objects.exclude(story_id__in=all_story_ids).count()
+    orphan_deps_to = StoryDependency.objects.exclude(depends_on_id__in=all_story_ids).count()
     orphan_deps_total = orphan_deps_from + orphan_deps_to
     if orphan_deps_total > 0:
         housekeeping['issues'].append({
@@ -251,7 +238,7 @@ def dashboard(request):
         })
     
     # 5. Orphaned history entries (history for deleted stories)
-    orphan_history = StoryHistory.objects.exclude(story_id__in=valid_story_ids).count()
+    orphan_history = StoryHistory.objects.exclude(story_id__in=all_story_ids).count()
     if orphan_history > 0:
         housekeeping['issues'].append({
             'type': 'orphan_history',
@@ -264,9 +251,8 @@ def dashboard(request):
             'severity': 'info',
         })
     
-    # 6. Stale value scores (scores for deleted factors)
-    valid_vf_ids = set(ValueFactor.objects.values_list('id', flat=True))
-    stale_value_scores = StoryValueFactorScore.objects.exclude(valuefactor_id__in=valid_vf_ids).count()
+    # 6. Stale value scores (scores for deleted factors) - reuse all_value_factors
+    stale_value_scores = StoryValueFactorScore.objects.exclude(valuefactor_id__in=all_value_factors).count()
     if stale_value_scores > 0:
         housekeeping['issues'].append({
             'type': 'stale_value_scores',
@@ -279,9 +265,8 @@ def dashboard(request):
             'severity': 'info',
         })
     
-    # 7. Stale cost scores (scores for deleted factors)
-    valid_cf_ids = set(CostFactor.objects.values_list('id', flat=True))
-    stale_cost_scores = StoryCostFactorScore.objects.exclude(costfactor_id__in=valid_cf_ids).count()
+    # 7. Stale cost scores (scores for deleted factors) - reuse all_cost_factors
+    stale_cost_scores = StoryCostFactorScore.objects.exclude(costfactor_id__in=all_cost_factors).count()
     if stale_cost_scores > 0:
         housekeeping['issues'].append({
             'type': 'stale_cost_scores',
@@ -294,23 +279,7 @@ def dashboard(request):
             'severity': 'info',
         })
     
-    # 8. Empty epics (epics with no stories)
-    empty_epics = Epic.objects.filter(archived=False).annotate(
-        story_count=Count('stories')
-    ).filter(story_count=0)
-    if empty_epics.exists():
-        housekeeping['issues'].append({
-            'type': 'empty_epics',
-            'icon': '📁',
-            'title': 'Empty Epics',
-            'description': 'Epics without any stories',
-            'count': empty_epics.count(),
-            'items': list(empty_epics[:10]),
-            'action': None,  # Informational only
-            'severity': 'info',
-        })
-    
-    # 9. Duplicate dependencies (same dependency recorded multiple times)
+    # 8. Duplicate dependencies (same dependency recorded multiple times)
     from django.db.models import Count as DjCount
     dup_deps = StoryDependency.objects.values('story', 'depends_on').annotate(
         cnt=DjCount('id')
@@ -335,7 +304,6 @@ def dashboard(request):
     
     # All stories (including archived)
     all_stories = Story.objects.all()
-    all_epics = Epic.objects.all()
     
     # Story counts by status
     status_counts = {}
@@ -345,16 +313,6 @@ def dashboard(request):
     
     # Archived counts
     archived_stories = all_stories.filter(archived=True).count()
-    archived_epics = all_epics.filter(archived=True).count()
-    
-    # Biggest epics (by active story count)
-    biggest_epics_data = []
-    for epic in all_epics.filter(archived=False):
-        count = epic.stories.filter(archived=False).count()
-        if count > 0:
-            biggest_epics_data.append({'epic': epic, 'story_count': count})
-    biggest_epics_data.sort(key=lambda x: x['story_count'], reverse=True)
-    biggest_epics_data = biggest_epics_data[:5]
     
     # Recently completed stories (finished in last 30 days)
     recently_completed = all_stories.filter(
@@ -391,11 +349,7 @@ def dashboard(request):
         'total_stories': all_stories.count(),
         'active_stories': all_stories.filter(archived=False).count(),
         'archived_stories': archived_stories,
-        'total_epics': all_epics.count(),
-        'active_epics': all_epics.filter(archived=False).count(),
-        'archived_epics': archived_epics,
         'status_counts': status_counts,
-        'biggest_epics': biggest_epics_data,
         'recently_completed': recently_completed,
         'oldest_open': oldest_open,
         'stories_with_deps': stories_with_deps,

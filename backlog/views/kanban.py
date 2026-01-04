@@ -12,8 +12,8 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from ..models import Epic, Story
-from .helpers import track_story_change
+from ..models import Story, ValueFactorSection, CostFactorSection
+from .helpers import apply_label_filter, get_label_filter_context, track_story_change
 from .report import _calculate_story_score
 
 
@@ -29,22 +29,30 @@ def kanban_view(request):
     
     Stories with 'idea' status are excluded from the board.
     
-    Supports filtering by epic and sorting by result, status, or dates.
+    Supports sorting by result, status, or dates.
+    Supports filtering by labels (multi-select with OR logic).
     """
-    epic_id = request.GET.get('epic')
+    # Get label filter context
+    label_filter_ctx = get_label_filter_context(request)
+    
     sort_by = request.GET.get('sort', 'result')  # result, status, started, blocked, finished
     sort_order = request.GET.get('order', 'desc')
-    all_epics = Epic.objects.filter(archived=False).order_by('title')
 
-    qs = Story.objects.filter(archived=False).select_related('epic').prefetch_related('scores__answer', 'cost_scores__answer')
-    if epic_id:
-        qs = qs.filter(epic_id=epic_id)
+    # Pre-load sections once to avoid N+1 queries in score calculation
+    value_sections = list(ValueFactorSection.objects.prefetch_related("valuefactors").all())
+    cost_sections = list(CostFactorSection.objects.prefetch_related("costfactors").all())
+
+    qs = Story.objects.filter(archived=False).prefetch_related('scores__answer', 'cost_scores__answer', 'labels__category')
+    
+    # Apply label filter
+    qs = apply_label_filter(qs, label_filter_ctx['selected_labels'])
+    
     stories = list(qs)
 
-    # Calculate scores for each story
+    # Calculate scores for each story (pass pre-loaded sections)
     story_data = []
     for s in stories:
-        score_info = _calculate_story_score(s)
+        score_info = _calculate_story_score(s, value_sections, cost_sections)
         story_data.append({
             'story': s,
             'result': score_info['result'],
@@ -92,10 +100,13 @@ def kanban_view(request):
 
     context = {
         'columns': columns,
-        'all_epics': all_epics,
-        'epic_id': epic_id or '',
         'sort': sort_by,
         'order': sort_order,
+        # Label filter context
+        'label_categories': label_filter_ctx['label_categories'],
+        'selected_labels': label_filter_ctx['selected_labels'],
+        'selected_labels_objects': label_filter_ctx['selected_labels_objects'],
+        'labels_param': label_filter_ctx['labels_param'],
     }
     return render(request, 'backlog/kanban.html', context)
 

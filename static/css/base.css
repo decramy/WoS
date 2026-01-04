@@ -234,6 +234,39 @@ main { padding: 20px }
 .status-ready { color: var(--accent-2); }
 .status-idea { color: var(--muted); }
 
+/* Label shields */
+.label-shield {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: white;
+  background: var(--label-color, #6b7280);
+}
+.label-shield .label-icon {
+  font-size: 10px;
+}
+.label-shield .label-text {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.labels-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.labels-container.labels-inline {
+  display: inline-flex;
+  margin-left: 8px;
+}
+
 /* Table links */
 .table-link { color: var(--accent); text-decoration: none; }
 .table-link:hover { text-decoration: underline; }
@@ -321,4 +354,196 @@ footer {
 
 .footer-separator {
   color: var(--border);
+}
+
+/* Label Filter - Per Category Dropdowns */
+.label-filters-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.label-filter-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.label-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 13px;
+  min-width: 100px;
+  justify-content: space-between;
+}
+
+.label-filter-btn:hover {
+  border-color: var(--accent);
+}
+
+.label-filter-btn.has-selected {
+  border-color: var(--accent);
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.label-filter-btn .cat-color {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.label-filter-btn .cat-icon {
+  font-size: 12px;
+}
+
+.label-filter-btn .filter-icon {
+  font-size: 10px;
+  opacity: 0.5;
+  margin-left: 4px;
+}
+
+.label-filter-btn .badge {
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 8px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.label-filter-content {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  margin-top: 4px;
+  padding: 4px 0;
+}
+
+.label-filter-content.show {
+  display: block;
+}
+
+.label-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 13px;
+}
+
+.label-filter-item:hover {
+  background: var(--surface);
+}
+
+.label-filter-item input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.label-filter-item .label-name {
+  flex: 1;
+}
+
+/* Applied Labels Display */
+.applied-labels-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.applied-labels-container:empty {
+  display: none;
+}
+
+.applied-label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  border-radius: 16px;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.applied-label-chip .chip-color {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.applied-label-chip .chip-icon {
+  font-size: 12px;
+}
+
+.applied-label-chip .chip-category {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.applied-label-chip .chip-name {
+  font-weight: 500;
+}
+
+.applied-label-chip .chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+
+.applied-label-chip .chip-remove:hover {
+  background: var(--danger);
+  color: white;
+}
+
+.clear-all-labels {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.clear-all-labels:hover {
+  border-color: var(--danger);
+  color: var(--danger);
 }

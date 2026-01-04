@@ -4,8 +4,8 @@ Comprehensive regression tests for the WoS (WSJF on Steroids) backlog applicatio
 These tests cover:
 - Model creation and relationships
 - computed_status property logic
-- Epic and Story CRUD operations
-- Archiving functionality with cascade
+- Story CRUD operations
+- Archiving functionality
 - History tracking
 - Kanban board moves
 - Report calculations
@@ -21,7 +21,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
-    Epic,
     Story,
     ValueFactorSection,
     ValueFactor,
@@ -42,12 +41,6 @@ class BaseTestCase(TestCase):
     def setUp(self):
         """Set up test data used across multiple tests."""
         self.client = Client()
-        
-        # Create an epic
-        self.epic = Epic.objects.create(
-            title="Test Epic",
-            description="Test Epic Description"
-        )
         
         # Create value factor section and factors
         self.value_section = ValueFactorSection.objects.create(
@@ -104,36 +97,12 @@ class BaseTestCase(TestCase):
         )
 
 
-class EpicModelTests(BaseTestCase):
-    """Tests for Epic model."""
-
-    def test_epic_creation(self):
-        """Test epic is created with correct fields."""
-        self.assertEqual(self.epic.title, "Test Epic")
-        self.assertEqual(self.epic.description, "Test Epic Description")
-        self.assertFalse(self.epic.archived)
-        self.assertIsNotNone(self.epic.created_at)
-        self.assertIsNotNone(self.epic.updated_at)
-
-    def test_epic_str(self):
-        """Test epic string representation."""
-        self.assertEqual(str(self.epic), "Test Epic")
-
-    def test_epic_archive(self):
-        """Test epic can be archived."""
-        self.epic.archived = True
-        self.epic.save()
-        self.epic.refresh_from_db()
-        self.assertTrue(self.epic.archived)
-
-
 class StoryModelTests(BaseTestCase):
     """Tests for Story model."""
 
     def test_story_creation(self):
         """Test story is created with correct fields."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Test Story",
             goal="Test Goal",
             workitems="Test Workitems"
@@ -141,19 +110,17 @@ class StoryModelTests(BaseTestCase):
         self.assertEqual(story.title, "Test Story")
         self.assertEqual(story.goal, "Test Goal")
         self.assertEqual(story.workitems, "Test Workitems")
-        self.assertEqual(story.epic, self.epic)
         self.assertFalse(story.archived)
         self.assertFalse(story.review_required)
 
     def test_story_str(self):
         """Test story string representation."""
-        story = Story.objects.create(epic=self.epic, title="My Story")
+        story = Story.objects.create(title="My Story")
         self.assertEqual(str(story), "My Story")
 
     def test_story_status_auto_update_to_refined(self):
         """Test status updates to 'refined' when goal and workitems are set."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Test Story",
             goal="Has goal",
             workitems="Has workitems"
@@ -163,7 +130,6 @@ class StoryModelTests(BaseTestCase):
     def test_story_status_remains_new_without_goal(self):
         """Test status remains 'new' when goal is missing."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Test Story",
             workitems="Has workitems"
         )
@@ -172,7 +138,6 @@ class StoryModelTests(BaseTestCase):
     def test_story_status_remains_new_without_workitems(self):
         """Test status remains 'new' when workitems is missing."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Test Story",
             goal="Has goal"
         )
@@ -184,13 +149,12 @@ class ComputedStatusTests(BaseTestCase):
 
     def test_computed_status_idea_missing_title(self):
         """Test computed_status is 'idea' when title is missing."""
-        story = Story.objects.create(epic=self.epic, title="")
+        story = Story.objects.create(title="")
         self.assertEqual(story.computed_status, "idea")
 
     def test_computed_status_idea_missing_goal(self):
         """Test computed_status is 'idea' when goal is missing."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             workitems="Has workitems"
         )
@@ -199,7 +163,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_idea_missing_workitems(self):
         """Test computed_status is 'idea' when workitems is missing."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             goal="Has goal"
         )
@@ -208,7 +171,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_idea_missing_scores(self):
         """Test computed_status is 'idea' when scores are missing."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             goal="Has goal",
             workitems="Has workitems"
@@ -220,7 +182,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_ready_all_fields_complete(self):
         """Test computed_status is 'ready' when all fields and scores are complete."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             goal="Has goal",
             workitems="Has workitems"
@@ -241,7 +202,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_planned(self):
         """Test computed_status is 'planned' when planned datetime is set."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             goal="Has goal",
             workitems="Has workitems",
@@ -262,7 +222,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_started(self):
         """Test computed_status is 'started' when started datetime is set."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             goal="Has goal",
             workitems="Has workitems",
@@ -274,7 +233,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_done(self):
         """Test computed_status is 'done' when finished datetime is set."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             planned=timezone.now(),
             started=timezone.now(),
@@ -285,7 +243,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_blocked_priority(self):
         """Test blocked status takes priority over all others."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             goal="Has goal",
             workitems="Has workitems",
@@ -299,7 +256,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_done_priority_over_started(self):
         """Test done status takes priority over started."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             started=timezone.now(),
             finished=timezone.now()
@@ -309,7 +265,6 @@ class ComputedStatusTests(BaseTestCase):
     def test_computed_status_started_priority_over_planned(self):
         """Test started status takes priority over planned."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Has Title",
             planned=timezone.now(),
             started=timezone.now()
@@ -322,7 +277,7 @@ class StoryHistoryTests(BaseTestCase):
 
     def test_story_history_creation(self):
         """Test history entry is created correctly."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         history = StoryHistory.objects.create(
             story=story,
             field_name="Title",
@@ -336,7 +291,7 @@ class StoryHistoryTests(BaseTestCase):
 
     def test_story_history_ordering(self):
         """Test history entries are ordered by most recent first."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         h1 = StoryHistory.objects.create(story=story, field_name="First")
         h2 = StoryHistory.objects.create(story=story, field_name="Second")
         
@@ -350,8 +305,8 @@ class StoryDependencyTests(BaseTestCase):
 
     def test_dependency_creation(self):
         """Test dependency is created correctly."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
         
         dep = StoryDependency.objects.create(story=story1, depends_on=story2)
         self.assertEqual(dep.story, story1)
@@ -359,8 +314,8 @@ class StoryDependencyTests(BaseTestCase):
 
     def test_dependency_unique_constraint(self):
         """Test duplicate dependencies are not allowed."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
         
         StoryDependency.objects.create(story=story1, depends_on=story2)
         
@@ -370,8 +325,8 @@ class StoryDependencyTests(BaseTestCase):
 
     def test_dependency_related_names(self):
         """Test related names for dependencies and dependents."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
         
         StoryDependency.objects.create(story=story1, depends_on=story2)
         
@@ -384,230 +339,19 @@ class StoryDependencyTests(BaseTestCase):
         self.assertEqual(story2.dependents.first().story, story1)
 
 
-class EpicViewTests(BaseTestCase):
-    """Tests for Epic-related views."""
-
-    def test_overview_page_loads(self):
-        """Test overview page loads successfully."""
-        response = self.client.get(reverse('backlog:epics'))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Test Epic")
-
-    def test_overview_create_epic(self):
-        """Test creating an epic via overview POST."""
-        response = self.client.post(reverse('backlog:epics'), {
-            'action': 'create_epic',
-            'title': 'New Epic',
-            'description': 'New Description'
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(Epic.objects.filter(title='New Epic').exists())
-
-    def test_overview_edit_epic(self):
-        """Test editing an epic via overview POST."""
-        response = self.client.post(reverse('backlog:epics'), {
-            'action': 'edit_epic',
-            'epic_id': self.epic.pk,
-            'title': 'Updated Epic',
-            'description': 'Updated Description'
-        })
-        self.assertEqual(response.status_code, 302)
-        self.epic.refresh_from_db()
-        self.assertEqual(self.epic.title, 'Updated Epic')
-
-    def test_overview_delete_epic(self):
-        """Test deleting an epic via overview POST."""
-        response = self.client.post(reverse('backlog:epics'), {
-            'action': 'delete_epic',
-            'epic_id': self.epic.pk
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertFalse(Epic.objects.filter(pk=self.epic.pk).exists())
-
-    def test_overview_archive_epic(self):
-        """Test archiving an epic via overview POST."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
-        
-        response = self.client.post(reverse('backlog:epics'), {
-            'action': 'archive_epic',
-            'epic_id': self.epic.pk
-        })
-        self.assertEqual(response.status_code, 302)
-        self.epic.refresh_from_db()
-        story.refresh_from_db()
-        self.assertTrue(self.epic.archived)
-        self.assertTrue(story.archived)  # Cascade archive to stories
-
-    def test_overview_unarchive_epic(self):
-        """Test unarchiving an epic via overview POST."""
-        self.epic.archived = True
-        self.epic.save()
-        
-        response = self.client.post(reverse('backlog:epics') + '?archived=1', {
-            'action': 'unarchive_epic',
-            'epic_id': self.epic.pk
-        })
-        self.assertEqual(response.status_code, 302)
-        self.epic.refresh_from_db()
-        self.assertFalse(self.epic.archived)
-
-    def test_overview_unarchive_epic_does_not_unarchive_stories(self):
-        """Test unarchiving an epic does NOT automatically unarchive its stories."""
-        # Archive the epic and its stories
-        story = Story.objects.create(epic=self.epic, title="Archived Story")
-        self.epic.archived = True
-        self.epic.save()
-        story.archived = True
-        story.save()
-        
-        # Unarchive the epic
-        response = self.client.post(reverse('backlog:epics') + '?archived=1', {
-            'action': 'unarchive_epic',
-            'epic_id': self.epic.pk
-        })
-        self.assertEqual(response.status_code, 302)
-        self.epic.refresh_from_db()
-        story.refresh_from_db()
-        
-        # Epic should be unarchived but story should remain archived
-        self.assertFalse(self.epic.archived)
-        self.assertTrue(story.archived)
-
-    def test_overview_shows_unfinished_count_for_confirmation(self):
-        """Test that overview page shows unfinished_count for archive confirmation dialog."""
-        # Create stories with different statuses
-        story_done = Story.objects.create(
-            epic=self.epic, 
-            title="Done Story",
-            finished=timezone.now()
-        )
-        story_idea = Story.objects.create(
-            epic=self.epic,
-            title="Idea Story"
-        )
-        story_started = Story.objects.create(
-            epic=self.epic,
-            title="Started Story",
-            started=timezone.now()
-        )
-        
-        response = self.client.get(reverse('backlog:epics'))
-        self.assertEqual(response.status_code, 200)
-        
-        # Find the epic in context and check unfinished_count
-        epics_data = response.context['epics']
-        test_epic_data = next((e for e in epics_data if e['epic'].pk == self.epic.pk), None)
-        self.assertIsNotNone(test_epic_data)
-        
-        # Should have 2 unfinished stories (idea + started, not done)
-        self.assertEqual(test_epic_data['unfinished_count'], 2)
-
-    def test_overview_unfinished_count_zero_when_all_done(self):
-        """Test unfinished_count is 0 when all stories are done."""
-        Story.objects.create(
-            epic=self.epic,
-            title="Done Story 1",
-            finished=timezone.now()
-        )
-        Story.objects.create(
-            epic=self.epic,
-            title="Done Story 2",
-            finished=timezone.now()
-        )
-        
-        response = self.client.get(reverse('backlog:epics'))
-        epics_data = response.context['epics']
-        test_epic_data = next((e for e in epics_data if e['epic'].pk == self.epic.pk), None)
-        
-        self.assertEqual(test_epic_data['unfinished_count'], 0)
-
-    def test_overview_unfinished_count_excludes_archived_stories(self):
-        """Test unfinished_count excludes archived stories."""
-        # Create an unfinished but archived story - should not count
-        Story.objects.create(
-            epic=self.epic,
-            title="Archived Idea",
-            archived=True
-        )
-        # Create an unfinished non-archived story - should count
-        Story.objects.create(
-            epic=self.epic,
-            title="Active Idea"
-        )
-        
-        response = self.client.get(reverse('backlog:epics'))
-        epics_data = response.context['epics']
-        test_epic_data = next((e for e in epics_data if e['epic'].pk == self.epic.pk), None)
-        
-        # Only the active unfinished story should be counted
-        self.assertEqual(test_epic_data['unfinished_count'], 1)
-
-    def test_overview_filter_archived(self):
-        """Test filtering archived epics."""
-        self.epic.archived = True
-        self.epic.save()
-        
-        active_epic = Epic.objects.create(title="Active Epic XYZ123")
-        
-        # Non-archived view - should show active epic, not archived one
-        response = self.client.get(reverse('backlog:epics'))
-        # The archived epic should not appear in the main list
-        # Check for the epic title in the epics list context
-        epics_in_response = [e['epic'].title for e in response.context['epics']]
-        self.assertNotIn("Test Epic", epics_in_response)
-        self.assertIn("Active Epic XYZ123", epics_in_response)
-        
-        # Archived view - should show archived epic, not active one
-        response = self.client.get(reverse('backlog:epics') + '?archived=1')
-        epics_in_response = [e['epic'].title for e in response.context['epics']]
-        self.assertIn("Test Epic", epics_in_response)
-        self.assertNotIn("Active Epic XYZ123", epics_in_response)
-
-    def test_create_epic_page(self):
-        """Test create epic page loads."""
-        response = self.client.get(reverse('backlog:epic_create'))
-        self.assertEqual(response.status_code, 200)
-
-    def test_create_epic_post(self):
-        """Test creating epic via dedicated page."""
-        response = self.client.post(reverse('backlog:epic_create'), {
-            'title': 'Page Epic',
-            'description': 'Created from page'
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(Epic.objects.filter(title='Page Epic').exists())
-
-    def test_edit_epic_page(self):
-        """Test edit epic page loads."""
-        response = self.client.get(reverse('backlog:epic_detail', args=[self.epic.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Test Epic")
-
-
 class StoryViewTests(BaseTestCase):
     """Tests for Story-related views."""
 
     def test_stories_page_loads(self):
         """Test stories list page loads."""
-        Story.objects.create(epic=self.epic, title="Test Story")
+        Story.objects.create(title="Test Story")
         response = self.client.get(reverse('backlog:stories'))
         self.assertEqual(response.status_code, 200)
 
-    def test_stories_filter_by_epic(self):
-        """Test filtering stories by epic."""
-        epic2 = Epic.objects.create(title="Epic 2")
-        story1 = Story.objects.create(epic=self.epic, title="Story Epic 1")
-        story2 = Story.objects.create(epic=epic2, title="Story Epic 2")
-        
-        response = self.client.get(reverse('backlog:stories') + f'?epic={self.epic.pk}')
-        self.assertContains(response, "Story Epic 1")
-        self.assertNotContains(response, "Story Epic 2")
-
     def test_stories_filter_by_status(self):
         """Test filtering stories by computed status."""
-        story_idea = Story.objects.create(epic=self.epic, title="Idea Story")
+        story_idea = Story.objects.create(title="Idea Story")
         story_done = Story.objects.create(
-            epic=self.epic,
             title="Done Story",
             finished=timezone.now()
         )
@@ -619,12 +363,10 @@ class StoryViewTests(BaseTestCase):
     def test_stories_filter_by_review_required(self):
         """Test filtering stories by review_required."""
         story_needs_review = Story.objects.create(
-            epic=self.epic,
             title="Needs Review",
             review_required=True
         )
         story_no_review = Story.objects.create(
-            epic=self.epic,
             title="No Review"
         )
         
@@ -634,7 +376,7 @@ class StoryViewTests(BaseTestCase):
 
     def test_stories_delete_story(self):
         """Test deleting a story - critical regression test."""
-        story = Story.objects.create(epic=self.epic, title="To Delete")
+        story = Story.objects.create(title="To Delete")
         
         response = self.client.post(reverse('backlog:stories'), {
             'action': 'delete_story',
@@ -645,7 +387,7 @@ class StoryViewTests(BaseTestCase):
 
     def test_stories_archive_story(self):
         """Test archiving a story from list."""
-        story = Story.objects.create(epic=self.epic, title="To Archive")
+        story = Story.objects.create(title="To Archive")
         
         response = self.client.post(reverse('backlog:stories'), {
             'action': 'archive_story',
@@ -657,7 +399,7 @@ class StoryViewTests(BaseTestCase):
 
     def test_stories_toggle_review(self):
         """Test toggling review_required from list."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(reverse('backlog:stories'), {
             'action': 'toggle_review',
@@ -673,18 +415,17 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_page_loads(self):
         """Test refine page loads for existing story."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         response = self.client.get(reverse('backlog:story_detail', args=[story.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Story")
 
     def test_refine_story_title_save(self):
         """Test saving story title - critical regression test (was broken before)."""
-        story = Story.objects.create(epic=self.epic, title="Original Title")
+        story = Story.objects.create(title="Original Title")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Updated Title',
-            'epic_id': self.epic.pk,
             'goal': 'Test Goal',
             'workitems': 'Test Workitems',
             'blocked': '',
@@ -695,11 +436,10 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_goal_save(self):
         """Test saving story goal."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
-            'epic_id': self.epic.pk,
             'goal': 'New Goal',
             'workitems': '',
             'blocked': '',
@@ -710,11 +450,10 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_workitems_save(self):
         """Test saving story workitems."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
-            'epic_id': self.epic.pk,
             'goal': '',
             'workitems': 'Work item 1\nWork item 2',
             'blocked': '',
@@ -723,29 +462,12 @@ class RefineStoryTests(BaseTestCase):
         story.refresh_from_db()
         self.assertEqual(story.workitems, 'Work item 1\nWork item 2')
 
-    def test_refine_story_change_epic(self):
-        """Test changing story epic."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
-        epic2 = Epic.objects.create(title="Epic 2")
-        
-        response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
-            'title': 'Test Story',
-            'epic_id': epic2.pk,
-            'goal': '',
-            'workitems': '',
-            'blocked': '',
-        })
-        self.assertEqual(response.status_code, 302)
-        story.refresh_from_db()
-        self.assertEqual(story.epic, epic2)
-
     def test_refine_story_blocked(self):
         """Test setting blocked field."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
-            'epic_id': self.epic.pk,
             'goal': '',
             'workitems': '',
             'blocked': 'Waiting for approval',
@@ -758,7 +480,6 @@ class RefineStoryTests(BaseTestCase):
     def test_refine_story_remove_blocked(self):
         """Test removing blocked status."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Test Story",
             blocked="Was blocked"
         )
@@ -772,7 +493,7 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_archive(self):
         """Test archiving story from refine page."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'action': 'archive_story',
@@ -783,7 +504,7 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_toggle_review(self):
         """Test toggling review_required from refine page."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'action': 'toggle_review',
@@ -794,11 +515,10 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_history_tracked(self):
         """Test that changes are tracked in history."""
-        story = Story.objects.create(epic=self.epic, title="Original Title")
+        story = Story.objects.create(title="Original Title")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'New Title',
-            'epic_id': self.epic.pk,
             'goal': 'New Goal',
             'workitems': '',
             'blocked': '',
@@ -811,11 +531,10 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_value_factor_score(self):
         """Test saving value factor scores."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
-            'epic_id': self.epic.pk,
             'goal': '',
             'workitems': '',
             'blocked': '',
@@ -828,11 +547,10 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_cost_factor_score(self):
         """Test saving cost factor scores."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story.pk]), {
             'title': 'Test Story',
-            'epic_id': self.epic.pk,
             'goal': '',
             'workitems': '',
             'blocked': '',
@@ -845,8 +563,8 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_add_dependency(self):
         """Test adding a dependency."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
         
         response = self.client.post(reverse('backlog:story_detail', args=[story1.pk]), {
             'action': 'add_dependency',
@@ -859,8 +577,8 @@ class RefineStoryTests(BaseTestCase):
 
     def test_refine_story_remove_dependency(self):
         """Test removing a dependency."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
         dep = StoryDependency.objects.create(story=story1, depends_on=story2)
         
         response = self.client.post(reverse('backlog:story_detail', args=[story1.pk]), {
@@ -885,14 +603,12 @@ class CreateStoryTests(BaseTestCase):
         """Test successfully creating a new story."""
         response = self.client.post(reverse('backlog:story_create'), {
             'title': 'New Story',
-            'epic_id': self.epic.pk,
             'goal': 'Story Goal',
             'workitems': 'Story Workitems',
             'blocked': '',
         })
         self.assertEqual(response.status_code, 302)
         story = Story.objects.get(title='New Story')
-        self.assertEqual(story.epic, self.epic)
         self.assertEqual(story.goal, 'Story Goal')
         self.assertEqual(story.workitems, 'Story Workitems')
 
@@ -900,7 +616,6 @@ class CreateStoryTests(BaseTestCase):
         """Test that history entry is created for new story."""
         response = self.client.post(reverse('backlog:story_create'), {
             'title': 'New Story',
-            'epic_id': self.epic.pk,
             'goal': '',
             'workitems': '',
             'blocked': '',
@@ -913,69 +628,10 @@ class CreateStoryTests(BaseTestCase):
         """Test creating story without title re-renders form."""
         response = self.client.post(reverse('backlog:story_create'), {
             'title': '',
-            'epic_id': self.epic.pk,
         })
         # Should re-render form, not create story
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(Story.objects.filter(epic=self.epic).exists())
-
-    def test_create_story_missing_epic(self):
-        """Test creating story without epic shows error and preserves input."""
-        response = self.client.post(reverse('backlog:story_create'), {
-            'title': 'Test Story Without Epic',
-            'epic_id': '',
-            'goal': 'My Goal',
-            'workitems': 'My Workitems',
-        })
-        # Should re-render form, not create story
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Story.objects.filter(title='Test Story Without Epic').exists())
-        
-        # Should show error message
-        messages_list = list(response.context['messages'])
-        self.assertEqual(len(messages_list), 1)
-        self.assertIn('Epic is required', str(messages_list[0]))
-        
-        # Should preserve the input
-        self.assertContains(response, 'Test Story Without Epic')
-        self.assertContains(response, 'My Goal')
-        self.assertContains(response, 'My Workitems')
-
-    def test_create_story_missing_both_title_and_epic(self):
-        """Test creating story without title and epic shows both errors."""
-        response = self.client.post(reverse('backlog:story_create'), {
-            'title': '',
-            'epic_id': '',
-        })
-        # Should re-render form
-        self.assertEqual(response.status_code, 200)
-        
-        # Should show error message with both errors
-        messages_list = list(response.context['messages'])
-        self.assertEqual(len(messages_list), 1)
-        message_text = str(messages_list[0])
-        self.assertIn('Title is required', message_text)
-        self.assertIn('Epic is required', message_text)
-
-    def test_create_story_epic_preselection_from_query_param(self):
-        """Test that epic is pre-selected when passed as query parameter."""
-        response = self.client.get(
-            reverse('backlog:story_create') + f'?epic={self.epic.pk}'
-        )
-        self.assertEqual(response.status_code, 200)
-        # The story in context should have the epic pre-filled
-        story = response.context['story']
-        self.assertEqual(story.epic, self.epic)
-
-    def test_create_story_epic_preselection_invalid_epic_ignored(self):
-        """Test that invalid epic ID in query param is ignored."""
-        response = self.client.get(
-            reverse('backlog:story_create') + '?epic=99999'
-        )
-        self.assertEqual(response.status_code, 200)
-        # The story in context should not have an epic
-        story = response.context['story']
-        self.assertIsNone(story.epic)
+        self.assertFalse(Story.objects.filter(title='').exists())
 
 
 class KanbanViewTests(BaseTestCase):
@@ -990,7 +646,6 @@ class KanbanViewTests(BaseTestCase):
         """Test kanban shows stories in correct columns."""
         # Create stories with different statuses
         story_ready = Story.objects.create(
-            epic=self.epic,
             title="Ready Story",
             goal="Goal",
             workitems="Work"
@@ -1007,7 +662,6 @@ class KanbanViewTests(BaseTestCase):
         )
         
         story_done = Story.objects.create(
-            epic=self.epic,
             title="Done Story",
             finished=timezone.now()
         )
@@ -1019,7 +673,6 @@ class KanbanViewTests(BaseTestCase):
     def test_kanban_move_to_planned(self):
         """Test moving a story to planned column."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Test Story",
             goal="Goal",
             workitems="Work"
@@ -1047,7 +700,7 @@ class KanbanViewTests(BaseTestCase):
 
     def test_kanban_move_to_doing(self):
         """Test moving a story to doing column."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(
             reverse('backlog:kanban_move'),
@@ -1061,7 +714,7 @@ class KanbanViewTests(BaseTestCase):
 
     def test_kanban_move_to_blocked(self):
         """Test moving a story to blocked column."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(
             reverse('backlog:kanban_move'),
@@ -1079,7 +732,7 @@ class KanbanViewTests(BaseTestCase):
 
     def test_kanban_move_to_done(self):
         """Test moving a story to done column."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(
             reverse('backlog:kanban_move'),
@@ -1094,7 +747,6 @@ class KanbanViewTests(BaseTestCase):
     def test_kanban_move_to_backlog(self):
         """Test moving a story back to backlog clears dates."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Test Story",
             planned=timezone.now(),
             started=timezone.now()
@@ -1114,7 +766,7 @@ class KanbanViewTests(BaseTestCase):
 
     def test_kanban_move_history_tracked(self):
         """Test that kanban moves are tracked in history."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(
             reverse('backlog:kanban_move'),
@@ -1128,7 +780,7 @@ class KanbanViewTests(BaseTestCase):
 
     def test_kanban_move_invalid_target(self):
         """Test kanban move with invalid target returns error."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         
         response = self.client.post(
             reverse('backlog:kanban_move'),
@@ -1158,7 +810,6 @@ class ReportViewTests(BaseTestCase):
     def test_report_shows_stories(self):
         """Test report shows stories with scores."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Test Story",
             goal="Goal",
             workitems="Work"
@@ -1177,21 +828,10 @@ class ReportViewTests(BaseTestCase):
         response = self.client.get(reverse('backlog:report'))
         self.assertContains(response, "Test Story")
 
-    def test_report_filter_by_epic(self):
-        """Test report filtering by epic."""
-        epic2 = Epic.objects.create(title="Epic 2")
-        Story.objects.create(epic=self.epic, title="Story 1")
-        Story.objects.create(epic=epic2, title="Story 2")
-        
-        response = self.client.get(reverse('backlog:report') + f'?epic={self.epic.pk}')
-        self.assertContains(response, "Story 1")
-        self.assertNotContains(response, "Story 2")
-
     def test_report_filter_by_status(self):
         """Test report filtering by status."""
-        Story.objects.create(epic=self.epic, title="Idea Story")
+        Story.objects.create(title="Idea Story")
         Story.objects.create(
-            epic=self.epic,
             title="Done Story",
             finished=timezone.now()
         )
@@ -1202,9 +842,8 @@ class ReportViewTests(BaseTestCase):
 
     def test_report_excludes_archived(self):
         """Test report excludes archived stories."""
-        story_active = Story.objects.create(epic=self.epic, title="Active Story")
+        story_active = Story.objects.create(title="Active Story")
         story_archived = Story.objects.create(
-            epic=self.epic,
             title="Archived Story",
             archived=True
         )
@@ -1227,7 +866,7 @@ class ReportViewTests(BaseTestCase):
 
     def test_report_value_cells_have_tweak_attributes(self):
         """Test report value cells have data attributes needed for tweak mode."""
-        story = Story.objects.create(epic=self.epic, title="Test Story")
+        story = Story.objects.create(title="Test Story")
         StoryValueFactorScore.objects.update_or_create(
             story=story,
             valuefactor=self.value_factor,
@@ -1273,14 +912,14 @@ class WBSViewTests(BaseTestCase):
 
     def test_wbs_shows_stories(self):
         """Test WBS shows stories."""
-        Story.objects.create(epic=self.epic, title="WBS Story")
+        Story.objects.create(title="WBS Story")
         response = self.client.get(reverse('backlog:wbs'))
         self.assertContains(response, "WBS Story")
 
     def test_wbs_add_dependency(self):
         """Test adding dependency via WBS AJAX."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
         
         response = self.client.post(
             reverse('backlog:wbs_add_dependency'),
@@ -1299,7 +938,7 @@ class WBSViewTests(BaseTestCase):
 
     def test_wbs_add_dependency_self(self):
         """Test cannot add dependency on self."""
-        story = Story.objects.create(epic=self.epic, title="Story")
+        story = Story.objects.create(title="Story")
         
         response = self.client.post(
             reverse('backlog:wbs_add_dependency'),
@@ -1313,8 +952,8 @@ class WBSViewTests(BaseTestCase):
 
     def test_wbs_add_duplicate_dependency(self):
         """Test cannot add duplicate dependency."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
         StoryDependency.objects.create(story=story1, depends_on=story2)
         
         response = self.client.post(
@@ -1329,8 +968,8 @@ class WBSViewTests(BaseTestCase):
 
     def test_wbs_remove_dependency(self):
         """Test removing dependency via WBS AJAX."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
         StoryDependency.objects.create(story=story1, depends_on=story2)
         
         response = self.client.post(
@@ -1350,8 +989,8 @@ class WBSViewTests(BaseTestCase):
 
     def test_wbs_excludes_archived(self):
         """Test WBS excludes archived stories from the main view."""
-        Story.objects.create(epic=self.epic, title="Active Story WBS")
-        Story.objects.create(epic=self.epic, title="Archived Story WBS", archived=True)
+        Story.objects.create(title="Active Story WBS")
+        Story.objects.create(title="Archived Story WBS", archived=True)
         
         response = self.client.get(reverse('backlog:wbs'))
         # Check the stories in the context (not HTML which may have dropdown with all stories)
@@ -1381,7 +1020,7 @@ class ScoreSignalTests(BaseTestCase):
         default score of 0. This distinguishes 'not yet scored' from an
         explicit score of 0.
         """
-        story = Story.objects.create(epic=self.epic, title="New Story")
+        story = Story.objects.create(title="New Story")
         
         # Check value factor score record was created with answer=None
         vf_score = StoryValueFactorScore.objects.filter(
@@ -1408,7 +1047,6 @@ class IntegrationTests(BaseTestCase):
         # Create story
         response = self.client.post(reverse('backlog:story_create'), {
             'title': 'Lifecycle Story',
-            'epic_id': self.epic.pk,
             'goal': 'Test the lifecycle',
             'workitems': 'Create, refine, plan, start, finish',
             'blocked': '',
@@ -1466,30 +1104,11 @@ class IntegrationTests(BaseTestCase):
         history = StoryHistory.objects.filter(story=story)
         self.assertGreater(history.count(), 0)
 
-    def test_archive_epic_with_stories(self):
-        """Test archiving an epic also archives its stories."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
-        
-        # Archive epic
-        self.client.post(reverse('backlog:epics'), {
-            'action': 'archive_epic',
-            'epic_id': self.epic.pk
-        })
-        
-        self.epic.refresh_from_db()
-        story1.refresh_from_db()
-        story2.refresh_from_db()
-        
-        self.assertTrue(self.epic.archived)
-        self.assertTrue(story1.archived)
-        self.assertTrue(story2.archived)
-
     def test_dependency_chain(self):
         """Test creating a chain of dependencies."""
-        story1 = Story.objects.create(epic=self.epic, title="Story 1")
-        story2 = Story.objects.create(epic=self.epic, title="Story 2")
-        story3 = Story.objects.create(epic=self.epic, title="Story 3")
+        story1 = Story.objects.create(title="Story 1")
+        story2 = Story.objects.create(title="Story 2")
+        story3 = Story.objects.create(title="Story 3")
         
         # story1 depends on story2
         StoryDependency.objects.create(story=story1, depends_on=story2)
@@ -1546,7 +1165,6 @@ class DashboardViewTests(BaseTestCase):
         """
         # Create story (will auto-create score records with answer=None)
         story = Story.objects.create(
-            epic=self.epic,
             title="Story with Undefined Scores",
             goal="Test goal",
             workitems="Test workitems"
@@ -1568,7 +1186,6 @@ class DashboardViewTests(BaseTestCase):
         """Test that story needs scoring when a new factor is added after creation."""
         # Create story first
         story = Story.objects.create(
-            epic=self.epic,
             title="Story Missing New Factor",
             goal="Test goal",
             workitems="Test workitems"
@@ -1600,7 +1217,6 @@ class DashboardViewTests(BaseTestCase):
         """Test that stories in idea status are detected as needing refinement."""
         # Create story without goal and workitems (idea status)
         story = Story.objects.create(
-            epic=self.epic,
             title="Idea Story"
         )
         
@@ -1610,13 +1226,15 @@ class DashboardViewTests(BaseTestCase):
         self.assertIn(story.id, needs_refinement)
 
     def test_refined_story_not_in_needs_refinement(self):
-        """Test that refined stories are not in needs_refinement."""
+        """Test that fully refined stories (with scores) are not in needs_refinement."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Refined Story",
             goal="Clear goal",
             workitems="Work to do"
         )
+        # Set actual scores (not just undefined) for the story to be truly "ready"
+        story.scores.update(answer=self.vf_answer_5)
+        story.cost_scores.update(answer=self.cf_answer_2)
         
         response = self.client.get(reverse('backlog:dashboard'))
         needs_refinement = [item['story'].id for item in response.context['needs_refinement']]
@@ -1626,7 +1244,6 @@ class DashboardViewTests(BaseTestCase):
     def test_rotting_blocked_story(self):
         """Test that stories blocked for too long are detected as rotting."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Blocked Story",
             goal="Test goal",
             workitems="Test workitems",
@@ -1645,7 +1262,6 @@ class DashboardViewTests(BaseTestCase):
     def test_rotting_started_story(self):
         """Test that stories started but not progressing are detected as rotting."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Stalled Story",
             goal="Test goal",
             workitems="Test workitems",
@@ -1660,7 +1276,6 @@ class DashboardViewTests(BaseTestCase):
     def test_rotting_planned_story(self):
         """Test that stories planned but not started are detected as rotting."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Planned Story",
             goal="Test goal",
             workitems="Test workitems",
@@ -1675,7 +1290,6 @@ class DashboardViewTests(BaseTestCase):
     def test_review_required_detection(self):
         """Test that stories flagged for review are detected."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Review Story",
             goal="Test goal",
             workitems="Test workitems",
@@ -1690,7 +1304,6 @@ class DashboardViewTests(BaseTestCase):
     def test_archived_stories_excluded(self):
         """Test that archived stories are excluded from the dashboard."""
         story = Story.objects.create(
-            epic=self.epic,
             title="Archived Story",
             archived=True
         )
@@ -1729,7 +1342,6 @@ class DashboardViewTests(BaseTestCase):
         # Create a story with all factors scored (auto-scored with 0)
         # and with goal/workitems set (so not in idea status)
         story = Story.objects.create(
-            epic=self.epic,
             title="Healthy Story",
             goal="Clear goal",
             workitems="Work items",
@@ -1753,14 +1365,12 @@ class DashboardViewTests(BaseTestCase):
         """Test that rotting stories are sorted by days descending."""
         # Create stories with different rotting durations
         Story.objects.create(
-            epic=self.epic,
             title="Less Stale",
             goal="Goal",
             workitems="Work",
             started=timezone.now() - timedelta(days=15)
         )
         Story.objects.create(
-            epic=self.epic,
             title="More Stale",
             goal="Goal",
             workitems="Work",
@@ -1782,22 +1392,6 @@ class DashboardViewTests(BaseTestCase):
         self.assertIn('issues', housekeeping)
         self.assertIn('total_issues', housekeeping)
 
-    def test_housekeeping_empty_epics_detected(self):
-        """Test that empty epics are detected in housekeeping."""
-        # Create an empty epic (no stories)
-        empty_epic = Epic.objects.create(
-            title="Empty Epic",
-            description="This epic has no stories"
-        )
-        
-        response = self.client.get(reverse('backlog:dashboard'))
-        housekeeping = response.context['housekeeping']
-        
-        # Find the empty_epics issue
-        empty_epic_issues = [i for i in housekeeping['issues'] if i['type'] == 'empty_epics']
-        self.assertEqual(len(empty_epic_issues), 1)
-        self.assertGreaterEqual(empty_epic_issues[0]['count'], 1)
-
     def test_housekeeping_orphan_value_scores_cleanup(self):
         """Test cleanup of orphaned value factor scores.
         
@@ -1808,7 +1402,6 @@ class DashboardViewTests(BaseTestCase):
         
         # Create a story and score it
         story = Story.objects.create(
-            epic=self.epic,
             title="Story to Delete",
             goal="Goal",
             workitems="Work"
@@ -1859,7 +1452,6 @@ class DashboardViewTests(BaseTestCase):
         
         # Create a story and score it
         story = Story.objects.create(
-            epic=self.epic,
             title="Story to Delete",
             goal="Goal",
             workitems="Work"
@@ -1910,13 +1502,11 @@ class DashboardViewTests(BaseTestCase):
         
         # Create two stories
         story1 = Story.objects.create(
-            epic=self.epic,
             title="Story 1",
             goal="Goal",
             workitems="Work"
         )
         story2 = Story.objects.create(
-            epic=self.epic,
             title="Story 2",
             goal="Goal",
             workitems="Work"
@@ -1962,7 +1552,6 @@ class DashboardViewTests(BaseTestCase):
         
         # Create a story
         story = Story.objects.create(
-            epic=self.epic,
             title="Story to Delete",
             goal="Goal",
             workitems="Work"
@@ -2019,11 +1608,7 @@ class DashboardViewTests(BaseTestCase):
         self.assertIn('total_stories', statistics)
         self.assertIn('active_stories', statistics)
         self.assertIn('archived_stories', statistics)
-        self.assertIn('total_epics', statistics)
-        self.assertIn('active_epics', statistics)
-        self.assertIn('archived_epics', statistics)
         self.assertIn('status_counts', statistics)
-        self.assertIn('biggest_epics', statistics)
         self.assertIn('recently_completed', statistics)
         self.assertIn('oldest_open', statistics)
         self.assertIn('stories_with_deps', statistics)
@@ -2033,13 +1618,11 @@ class DashboardViewTests(BaseTestCase):
         """Test that statistics counts are accurate."""
         # Create some additional stories
         story1 = Story.objects.create(
-            epic=self.epic,
             title="Active Story",
             goal="Goal",
             workitems="Work"
         )
         story2 = Story.objects.create(
-            epic=self.epic,
             title="Archived Story",
             archived=True
         )
@@ -2050,25 +1633,6 @@ class DashboardViewTests(BaseTestCase):
         # Check that counts reflect the data
         self.assertEqual(statistics['archived_stories'], 1)
         self.assertGreaterEqual(statistics['active_stories'], 1)
-        self.assertGreaterEqual(statistics['total_epics'], 1)
-
-    def test_statistics_biggest_epics(self):
-        """Test that biggest epics are correctly identified."""
-        # Create stories in our test epic
-        for i in range(3):
-            Story.objects.create(
-                epic=self.epic,
-                title=f"Story {i}",
-                goal="Goal",
-                workitems="Work"
-            )
-        
-        response = self.client.get(reverse('backlog:dashboard'))
-        statistics = response.context['statistics']
-        
-        # Our epic should be in the biggest epics list
-        epic_ids = [item['epic'].id for item in statistics['biggest_epics']]
-        self.assertIn(self.epic.id, epic_ids)
 
     def test_review_required_shown_first(self):
         """Test that review required section appears before other sections in template."""
@@ -2083,3 +1647,185 @@ class DashboardViewTests(BaseTestCase):
         self.assertTrue(review_pos > 0)
         self.assertTrue(scoring_pos > 0)
         self.assertLess(review_pos, scoring_pos)
+
+
+class LabelFilterTests(BaseTestCase):
+    """Tests for the label filter functionality across views."""
+
+    def setUp(self):
+        """Set up test data including labels."""
+        super().setUp()
+        from .models import LabelCategory, Label
+        
+        # Create label categories
+        self.category1 = LabelCategory.objects.create(
+            name="Feature Area",
+            color="#FF5733",
+            icon="💻"
+        )
+        self.category2 = LabelCategory.objects.create(
+            name="Priority",
+            color="#33FF57",
+            icon="🔥"
+        )
+        
+        # Create labels
+        self.label1 = Label.objects.create(
+            category=self.category1,
+            name="Frontend"
+        )
+        self.label2 = Label.objects.create(
+            category=self.category1,
+            name="Backend"
+        )
+        self.label3 = Label.objects.create(
+            category=self.category2,
+            name="High Priority"
+        )
+        
+        # Create stories with different labels
+        self.story_frontend = Story.objects.create(
+            title="Frontend Story",
+            goal="Build frontend",
+            workitems="UI work"
+        )
+        self.story_frontend.labels.add(self.label1)
+        
+        self.story_backend = Story.objects.create(
+            title="Backend Story",
+            goal="Build backend",
+            workitems="API work"
+        )
+        self.story_backend.labels.add(self.label2)
+        
+        self.story_both = Story.objects.create(
+            title="Full Stack Story",
+            goal="Build everything",
+            workitems="All work"
+        )
+        self.story_both.labels.add(self.label1, self.label2, self.label3)
+        
+        self.story_no_labels = Story.objects.create(
+            title="Unlabeled Story",
+            goal="No labels",
+            workitems="No work"
+        )
+
+    def test_stories_list_no_filter(self):
+        """Test stories list without label filter shows all stories."""
+        response = self.client.get(reverse('backlog:stories'))
+        self.assertEqual(response.status_code, 200)
+        # Should show all 4 stories
+        stories = [s['story'] for s in response.context['stories']]
+        self.assertEqual(len(stories), 4)
+
+    def test_stories_list_single_label_filter(self):
+        """Test filtering by a single label."""
+        response = self.client.get(reverse('backlog:stories'), {'labels': str(self.label1.id)})
+        self.assertEqual(response.status_code, 200)
+        stories = [s['story'] for s in response.context['stories']]
+        # Should show Frontend Story and Full Stack Story
+        self.assertEqual(len(stories), 2)
+        story_titles = {s.title for s in stories}
+        self.assertIn("Frontend Story", story_titles)
+        self.assertIn("Full Stack Story", story_titles)
+
+    def test_stories_list_multiple_labels_filter_and(self):
+        """Test filtering by multiple labels uses AND logic."""
+        # Filter by both Frontend and High Priority labels
+        # Only Full Stack Story has BOTH labels
+        labels_param = f"{self.label1.id},{self.label3.id}"
+        response = self.client.get(reverse('backlog:stories'), {'labels': labels_param})
+        self.assertEqual(response.status_code, 200)
+        stories = [s['story'] for s in response.context['stories']]
+        # Should only show Full Stack Story (has both Frontend and High Priority)
+        self.assertEqual(len(stories), 1)
+        self.assertEqual(stories[0].title, "Full Stack Story")
+
+    def test_stories_list_label_filter_context(self):
+        """Test that label filter context is passed to template."""
+        response = self.client.get(reverse('backlog:stories'))
+        self.assertIn('label_categories', response.context)
+        self.assertIn('selected_labels', response.context)
+        self.assertIn('selected_labels_objects', response.context)
+        self.assertIn('labels_param', response.context)
+        # Should have 2 categories
+        self.assertEqual(len(response.context['label_categories']), 2)
+
+    def test_selected_labels_objects_populated(self):
+        """Test that selected_labels_objects contains Label objects with category info."""
+        # Filter by frontend label
+        response = self.client.get(reverse('backlog:stories'), {'labels': str(self.label1.id)})
+        self.assertEqual(response.status_code, 200)
+        selected_objs = response.context['selected_labels_objects']
+        self.assertEqual(len(selected_objs), 1)
+        self.assertEqual(selected_objs[0].name, "Frontend")
+        self.assertEqual(selected_objs[0].category.name, "Feature Area")
+
+    def test_report_view_label_filter(self):
+        """Test label filtering on report view."""
+        response = self.client.get(reverse('backlog:report'), {'labels': str(self.label1.id)})
+        self.assertEqual(response.status_code, 200)
+        rows = response.context['rows']
+        # Should show Frontend Story and Full Stack Story
+        self.assertEqual(len(rows), 2)
+        story_titles = {r['story'].title for r in rows}
+        self.assertIn("Frontend Story", story_titles)
+        self.assertIn("Full Stack Story", story_titles)
+
+    def test_kanban_view_label_filter(self):
+        """Test label filtering on kanban view."""
+        # Make some stories ready for kanban
+        self.story_frontend.status = 'ready'
+        self.story_frontend.save()
+        self.story_backend.status = 'ready'
+        self.story_backend.save()
+        
+        response = self.client.get(reverse('backlog:kanban'), {'labels': str(self.label1.id)})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('label_categories', response.context)
+        self.assertIn('selected_labels', response.context)
+
+    def test_wbs_view_label_filter(self):
+        """Test label filtering on WBS view."""
+        response = self.client.get(reverse('backlog:wbs'), {'labels': str(self.label1.id)})
+        self.assertEqual(response.status_code, 200)
+        stories = response.context['stories']
+        # Should show only stories with Frontend label
+        self.assertEqual(len(stories), 2)
+
+    def test_invalid_labels_param_handled(self):
+        """Test that invalid labels parameter is handled gracefully."""
+        # Test with invalid format
+        response = self.client.get(reverse('backlog:stories'), {'labels': 'abc,xyz'})
+        self.assertEqual(response.status_code, 200)
+        # Should show all stories (invalid params ignored)
+        stories = [s['story'] for s in response.context['stories']]
+        self.assertEqual(len(stories), 4)
+
+    def test_labels_filter_preserves_other_params(self):
+        """Test that label filter works with other query parameters."""
+        # To have computed_status = 'ready', story needs all text fields and scores set
+        # Mark the frontend story as planned (which sets computed_status directly)
+        from django.utils import timezone
+        self.story_frontend.planned = timezone.now()
+        self.story_frontend.save()
+        
+        # Filter by label AND status
+        response = self.client.get(reverse('backlog:stories'), {
+            'labels': str(self.label1.id),
+            'status': 'planned'
+        })
+        self.assertEqual(response.status_code, 200)
+        stories = [s['story'] for s in response.context['stories']]
+        # Only Frontend Story should match (has label1 and status=planned)
+        # Full Stack Story also has label1 but its computed_status is 'idea'
+        self.assertEqual(len(stories), 1)
+        self.assertEqual(stories[0].title, "Frontend Story")
+
+    def test_empty_labels_param_shows_all(self):
+        """Test that empty labels parameter shows all stories."""
+        response = self.client.get(reverse('backlog:stories'), {'labels': ''})
+        self.assertEqual(response.status_code, 200)
+        stories = [s['story'] for s in response.context['stories']]
+        self.assertEqual(len(stories), 4)

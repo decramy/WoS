@@ -5,6 +5,49 @@ All notable changes to WoS (WSJF on Steroids) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-01-04
+
+### Breaking Changes
+- **Epic model removed**: The Epic container model has been removed from the system
+  - Stories are now standalone entities and don't require an epic
+  - Migration 0017 automatically converts epic names to labels
+  - All existing epics are migrated to a "Former Epics" label category
+
+### Added
+- **Label system**: New flexible categorization replacing epics
+  - `LabelCategory` model: Categories with color and icon (e.g., Epic, Team, Priority)
+  - `Label` model: Individual labels within categories
+  - Many-to-many relationship: Stories can have multiple labels
+  - Auto-migration: All former epics converted to labels in "Former Epics" category
+  
+- **Label filtering**: Intuitive multi-select filter across all list views
+  - Dropdown per label category for organized selection
+  - AND logic: Filter to stories with ALL selected labels
+  - Applied labels shown with × remove button
+  - Consistent filter on Stories, Report, Kanban, and WBS pages
+  - Preserves other URL parameters (sort, status, etc.)
+  - 10 new tests for label filtering functionality
+
+### Changed
+- **Performance optimizations**: Significant query efficiency improvements
+  - `computed_status` property now uses prefetched data (avoids N+1 queries)
+  - `_calculate_story_score` accepts pre-loaded sections to avoid repeated queries
+  - Dashboard housekeeping reuses already-loaded factor IDs
+  - Story signal uses `bulk_create` with `ignore_conflicts` instead of loop
+  - Added database indexes on frequently queried fields:
+    - Single-field: `archived`, `status`, `review_required`, `planned`, `started`, `finished`
+    - Composite: `(archived, status)`, `(archived, created_at)`
+
+- **Correct undefined score handling**: `computed_status` now properly distinguishes between:
+  - Undefined scores (answer=None) → story is 'idea'
+  - Actual scores (even score=0) → counted as scored
+  
+### Removed
+- `Epic` model and all related views (epic_list, epic_detail, epic_create, epic_update)
+- `epic` ForeignKey on Story model
+- `/backlog/epics/` and `/backlog/epic/<id>/` URL patterns
+- Epic-related tests (91 → 108 tests after refactoring)
+
 ## [1.2.0] - 2026-01-01
 
 ### Added

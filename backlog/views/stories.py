@@ -15,7 +15,8 @@ from ..models import (
     CostFactor,
     CostFactorAnswer,
     CostFactorSection,
-    Epic,
+    Label,
+    LabelCategory,
     Story,
     StoryCostFactorScore,
     StoryDependency,
@@ -25,14 +26,14 @@ from ..models import (
     ValueFactorAnswer,
     ValueFactorSection,
 )
-from .helpers import track_story_change
+from .helpers import apply_label_filter, get_label_filter_context, track_story_change
 
 
 def refine_story(request, pk):
     """Refine an existing story with full editing capabilities.
     
     This view allows editing:
-    - Basic info: title, epic, goal, workitems
+    - Basic info: title, goal, workitems
     - Value/cost factor scores
     - Dependencies on other stories
     - Archive/unarchive and review flags
@@ -40,7 +41,6 @@ def refine_story(request, pk):
     Also displays story history and dependent stories.
     """
     story = get_object_or_404(Story, pk=pk)
-    epics = Epic.objects.order_by("title")
     # load factor sections for scoring UI
     value_sections = ValueFactorSection.objects.prefetch_related("valuefactors__answers").order_by("name")
     cost_sections = CostFactorSection.objects.prefetch_related("costfactors__answers").order_by("name")
@@ -79,22 +79,13 @@ def refine_story(request, pk):
         cost_sections_data.append({'section': cs, 'costfactors': cf_list})
     
     # Get current dependencies
-    dependencies = story.dependencies.select_related('depends_on__epic').all()
+    dependencies = story.dependencies.select_related('depends_on').all()
     
     # Get stories that depend on this story (dependents)
-    dependents = story.dependents.select_related('story__epic').all()
+    dependents = story.dependents.select_related('story').all()
     
-    # Get available stories for dependency picker (grouped by epic)
-    # First: stories in same epic (excluding self), then other epics
-    same_epic_stories = Story.objects.filter(epic=story.epic).exclude(pk=story.pk).order_by('title')
-    other_stories = Story.objects.exclude(epic=story.epic).exclude(pk=story.pk).select_related('epic').order_by('epic__title', 'title')
-    
-    # Group other stories by epic
-    other_epics_stories = {}
-    for s in other_stories:
-        if s.epic.id not in other_epics_stories:
-            other_epics_stories[s.epic.id] = {'epic': s.epic, 'stories': []}
-        other_epics_stories[s.epic.id]['stories'].append(s)
+    # Get available stories for dependency picker
+    other_stories = Story.objects.exclude(pk=story.pk).order_by('title')
     
     if request.method == "POST":
         action = request.POST.get("action")
@@ -148,19 +139,14 @@ def refine_story(request, pk):
         
         # Store old values for tracking
         old_title = story.title
-        old_epic = story.epic
         old_goal = story.goal
         old_workitems = story.workitems
         old_blocked = story.blocked
         
-        # allow updating title and epic here (refinement)
+        # allow updating title here (refinement)
         title = request.POST.get("title")
         if title is not None:
             story.title = title.strip()
-
-        epic_pk = request.POST.get("epic_id")
-        if epic_pk:
-            story.epic = get_object_or_404(Epic, pk=epic_pk)
 
         story.goal = request.POST.get("goal", story.goal)
         story.workitems = request.POST.get("workitems", story.workitems)
@@ -170,8 +156,6 @@ def refine_story(request, pk):
         
         # Track text field changes
         track_story_change(story, 'Title', old_title, story.title)
-        if old_epic != story.epic:
-            track_story_change(story, 'Epic', old_epic.title, story.epic.title)
         track_story_change(story, 'Goal', old_goal, story.goal)
         track_story_change(story, 'Work items', old_workitems, story.workitems)
         track_story_change(story, 'Blocked', old_blocked, story.blocked)
@@ -238,6 +222,29 @@ def refine_story(request, pk):
                 StoryCostFactorScore.objects.update_or_create(
                     story=story, costfactor=cf, defaults={"answer": answer}
                 )
+        
+        # Handle labels
+        old_labels = set(story.labels.values_list('id', flat=True))
+        new_label_ids = request.POST.getlist('labels')
+        new_labels = set()
+        for lid in new_label_ids:
+            try:
+                new_labels.add(int(lid))
+            except (ValueError, TypeError):
+                pass
+        
+        if old_labels != new_labels:
+            # Track label changes
+            old_label_names = sorted([l.name for l in Label.objects.filter(id__in=old_labels)])
+            new_label_names = sorted([l.name for l in Label.objects.filter(id__in=new_labels)])
+            track_story_change(
+                story, 
+                'Labels', 
+                ', '.join(old_label_names) or '(none)',
+                ', '.join(new_label_names) or '(none)'
+            )
+            story.labels.set(new_labels)
+        
         messages.success(request, f'✅ Story "{story.title}" has been updated successfully.')
         # Redirect to next URL if provided, otherwise to story detail
         next_url = request.POST.get('next', '').strip()
@@ -248,6 +255,10 @@ def refine_story(request, pk):
     # Get history for this story
     history = story.history.all()[:50]  # Limit to last 50 entries
     
+    # Get all labels grouped by category
+    label_categories = LabelCategory.objects.prefetch_related('labels').order_by('name')
+    story_labels = set(story.labels.values_list('id', flat=True))
+    
     # Get next URL from query param for back link
     next_url = request.GET.get('next', '').strip()
     back_url = reverse('backlog:stories')
@@ -257,14 +268,14 @@ def refine_story(request, pk):
         "backlog/refine.html",
         {
             "story": story,
-            "epics": epics,
             "value_sections": value_sections_data,
             "cost_sections": cost_sections_data,
             "dependencies": dependencies,
             "dependents": dependents,
-            "same_epic_stories": same_epic_stories,
-            "other_epics_stories": list(other_epics_stories.values()),
+            "other_stories": other_stories,
             "history": history,
+            "label_categories": label_categories,
+            "story_labels": story_labels,
             "next_url": next_url,
             "back_url": back_url,
         },
@@ -277,7 +288,6 @@ def create_story_refine(request):
     On GET: render the same `refine.html` but with an unsaved Story-like object.
     On POST: create the story and redirect to overview.
     """
-    epics = Epic.objects.order_by("title")
     # factor sections for scoring UI (useful for preselecting defaults)
     value_sections = ValueFactorSection.objects.prefetch_related("valuefactors__answers").order_by("name")
     cost_sections = CostFactorSection.objects.prefetch_related("costfactors__answers").order_by("name")
@@ -306,16 +316,12 @@ def create_story_refine(request):
         cost_sections_data.append({'section': cs, 'costfactors': cf_list})
     if request.method == "POST":
         title = request.POST.get("title", "").strip()
-        epic_pk = request.POST.get("epic_id")
         goal = request.POST.get("goal", "").strip()
         workitems = request.POST.get("workitems", "").strip()
         
-        if title and epic_pk:
-            epic = get_object_or_404(Epic, pk=epic_pk)
-            
+        if title:
             # Create story with all fields
             story = Story.objects.create(
-                epic=epic,
                 title=title,
                 goal=goal,
                 workitems=workitems
@@ -326,7 +332,7 @@ def create_story_refine(request):
                 story=story,
                 field_name='Story created',
                 old_value=None,
-                new_value=f'Created in epic: {epic.title}'
+                new_value=f'Created: {title}'
             )
             
             # Handle blocked field (started/finished are read-only and not set on creation)
@@ -372,6 +378,25 @@ def create_story_refine(request):
                         story=story, costfactor=cf, defaults={"answer": answer}
                     )
 
+            # Handle labels on creation
+            new_label_ids = request.POST.getlist('labels')
+            if new_label_ids:
+                label_ids = []
+                for lid in new_label_ids:
+                    try:
+                        label_ids.append(int(lid))
+                    except (ValueError, TypeError):
+                        pass
+                if label_ids:
+                    story.labels.set(label_ids)
+                    label_names = sorted([l.name for l in Label.objects.filter(id__in=label_ids)])
+                    StoryHistory.objects.create(
+                        story=story,
+                        field_name='Labels',
+                        old_value='(none)',
+                        new_value=', '.join(label_names)
+                    )
+
             messages.success(request, f'✅ Story "{story.title}" has been created successfully.')
             # Redirect to next URL if provided, otherwise to story detail
             next_url = request.POST.get('next', '').strip()
@@ -383,8 +408,6 @@ def create_story_refine(request):
             errors = []
             if not title:
                 errors.append('Title is required')
-            if not epic_pk:
-                errors.append('Epic is required')
             messages.error(request, '❌ ' + ', '.join(errors) + '.')
             
             # Preserve the submitted values
@@ -398,42 +421,34 @@ def create_story_refine(request):
                     self.planned = None
                     self.started = None
                     self.finished = None
-                    self.epic = None
-                    # Try to set epic if provided
-                    epic_id = request.POST.get("epic_id")
-                    if epic_id:
-                        try:
-                            self.epic = Epic.objects.get(pk=epic_id)
-                        except Epic.DoesNotExist:
-                            pass
             
             story = _S()
             # Preserve next_url on validation error
             next_url = request.POST.get('next', '').strip()
             back_url = reverse('backlog:stories')
+            # Get labels for the form, preserving selection
+            label_categories = LabelCategory.objects.prefetch_related('labels').order_by('name')
+            story_labels = set()
+            for lid in request.POST.getlist('labels'):
+                try:
+                    story_labels.add(int(lid))
+                except (ValueError, TypeError):
+                    pass
             return render(
                 request,
                 "backlog/refine.html",
                 {
                     "story": story,
-                    "epics": epics,
                     "value_sections": value_sections_data,
                     "cost_sections": cost_sections_data,
+                    "label_categories": label_categories,
+                    "story_labels": story_labels,
                     "next_url": next_url,
                     "back_url": back_url,
                 },
             )
 
     # GET request - create a lightweight story-like object for the template
-    # Check if epic is pre-selected via query parameter
-    preselect_epic = None
-    preselect_epic_id = request.GET.get('epic', '').strip()
-    if preselect_epic_id:
-        try:
-            preselect_epic = Epic.objects.get(pk=preselect_epic_id)
-        except (Epic.DoesNotExist, ValueError):
-            pass
-    
     class _S:
         def __init__(self):
             self.id = None
@@ -444,7 +459,6 @@ def create_story_refine(request):
             self.planned = None
             self.started = None
             self.finished = None
-            self.epic = preselect_epic
 
     story = _S()
     
@@ -452,14 +466,19 @@ def create_story_refine(request):
     next_url = request.GET.get('next', '').strip()
     back_url = reverse('backlog:stories')
     
+    # Get all labels grouped by category
+    label_categories = LabelCategory.objects.prefetch_related('labels').order_by('name')
+    story_labels = set()  # No labels selected for new story
+    
     return render(
         request,
         "backlog/refine.html",
         {
             "story": story,
-            "epics": epics,
             "value_sections": value_sections_data,
             "cost_sections": cost_sections_data,
+            "label_categories": label_categories,
+            "story_labels": story_labels,
             "next_url": next_url,
             "back_url": back_url,
         },
@@ -503,36 +522,36 @@ def story_list(request):
             story.delete()
             return redirect(request.get_full_path())
     
-    epic_id = request.GET.get('epic')
+    # Get label filter context
+    label_filter_ctx = get_label_filter_context(request)
+    
     status_filter = request.GET.get('status', '').strip()
     review_filter = request.GET.get('review', '').strip()
     q = request.GET.get('q', '').strip()
-    sort = request.GET.get('sort', 'epic')
+    sort = request.GET.get('sort', 'title')
     order = request.GET.get('order', 'asc')
     show_archived = request.GET.get('archived', '') == '1'
 
-    # provide list of epics for the epic filter dropdown (non-archived only for filter)
-    all_epics = Epic.objects.filter(archived=False).order_by('title')
     # provide list of possible statuses
     all_statuses = ['idea', 'ready', 'planned', 'started', 'done', 'blocked']
 
-    qs = Story.objects.select_related('epic').prefetch_related('scores', 'cost_scores')
+    qs = Story.objects.prefetch_related('scores', 'cost_scores', 'labels__category')
     
     # Filter by archived status
     qs = qs.filter(archived=show_archived)
     
-    if epic_id:
-        qs = qs.filter(epic_id=epic_id)
+    # Filter by labels (multi-select with OR logic)
+    qs = apply_label_filter(qs, label_filter_ctx['selected_labels'])
+    
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(goal__icontains=q) | Q(workitems__icontains=q))
 
     sort_map = {
         'title': 'title',
-        'epic': 'epic__title',
         'created': 'created_at',
         'status': 'status',
     }
-    sort_field = sort_map.get(sort, 'epic__title')
+    sort_field = sort_map.get(sort, 'title')
     if order == 'desc':
         sort_field = '-' + sort_field
 
@@ -584,11 +603,71 @@ def story_list(request):
         'q': q,
         'sort': sort,
         'order': order,
-        'epic_id': epic_id,
         'status_filter': status_filter,
         'review_filter': review_filter,
-        'all_epics': all_epics,
         'all_statuses': all_statuses,
         'show_archived': show_archived,
+        # Label filter context
+        'label_categories': label_filter_ctx['label_categories'],
+        'selected_labels': label_filter_ctx['selected_labels'],
+        'selected_labels_objects': label_filter_ctx['selected_labels_objects'],
+        'labels_param': label_filter_ctx['labels_param'],
     }
     return render(request, 'backlog/stories.html', context)
+
+
+def create_label(request):
+    """AJAX endpoint to create a new label.
+    
+    Expects JSON body with:
+    - category_id: ID of the LabelCategory
+    - name: Name for the new label
+    
+    Returns JSON with:
+    - success: True/False
+    - label_id: ID of the created label (on success)
+    - label_name: Name of the created label (on success)
+    - error: Error message (on failure)
+    """
+    import json
+    from django.http import JsonResponse
+    from django.views.decorators.http import require_POST
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        category_id = data.get('category_id')
+        name = data.get('name', '').strip()
+        
+        if not category_id:
+            return JsonResponse({'success': False, 'error': 'Category ID required'})
+        
+        if not name:
+            return JsonResponse({'success': False, 'error': 'Label name required'})
+        
+        # Get the category
+        from ..models import LabelCategory
+        try:
+            category = LabelCategory.objects.get(pk=category_id)
+        except LabelCategory.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Category not found'})
+        
+        # Check if label with same name already exists in this category
+        if Label.objects.filter(category=category, name__iexact=name).exists():
+            return JsonResponse({'success': False, 'error': 'Label already exists in this category'})
+        
+        # Create the label
+        label = Label.objects.create(category=category, name=name)
+        
+        return JsonResponse({
+            'success': True,
+            'label_id': label.id,
+            'label_name': label.name,
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)

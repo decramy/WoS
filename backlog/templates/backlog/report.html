@@ -1,5 +1,5 @@
 {% extends 'backlog/base.html' %}
-{% load static %}
+{% load static icon_tags %}
 
 {% block title %}Report — WoS{% endblock %}
 
@@ -26,13 +26,6 @@
 </div>
 
 <form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-  <label for="epic-select">📁 Epic:</label>
-  <select id="epic-select" name="epic" onchange="this.form.submit()">
-    <option value="">All Epics</option>
-    {% for e in all_epics %}
-      <option value="{{ e.id }}" {% if e.id|stringformat:"s" == epic_id|stringformat:"s" %}selected{% endif %}>{{ e.title }}</option>
-    {% endfor %}
-  </select>
   <label for="status-select">🏷️ Status:</label>
   <select id="status-select" name="status" onchange="this.form.submit()">
     <option value="">All Statuses</option>
@@ -43,14 +36,12 @@
     <option value="blocked" {% if status_filter == 'blocked' %}selected{% endif %}>BLOCKED</option>
     <option value="done" {% if status_filter == 'done' %}selected{% endif %}>DONE</option>
   </select>
+  {% include 'backlog/_label_filter.html' %}
 </form>
 
 <table class="overview-table" id="report-table" style="margin-top:12px;">
   <thead>
     <tr>
-      <th class="sortable">
-        📁 Epic <span class="sort-icon"></span>
-      </th>
       <th class="sortable">
         📋 Story <span class="sort-icon"></span>
       </th>
@@ -81,9 +72,6 @@
   <tbody>
     {% for r in rows %}
       <tr data-result="{% if r.result is not None %}{{ r.result }}{% endif %}">
-        <td>
-          <a href="{% url 'backlog:epic_detail' r.story.epic.id %}" class="table-link">{{ r.story.epic.title|truncatechars:20 }}</a>
-        </td>
         <td>
           <a href="{% url 'backlog:story_detail' r.story.id %}" class="table-link">{{ r.story.title|truncatechars:30 }}</a>
         </td>

@@ -1,8 +1,9 @@
 from django.contrib import admin
 from django import forms
 from .models import (
-	Epic,
 	Story,
+	Label,
+	LabelCategory,
 	ValueFactorSection,
 	ValueFactor,
 	ValueFactorAnswer,
@@ -16,10 +17,50 @@ from .models import (
 )
 
 
-admin.site.register(Epic)
 admin.site.register(ValueFactorSection)
 admin.site.register(CostFactorSection)
 admin.site.register(StoryDependency)
+
+
+# =============================================================================
+# Label Admin
+# =============================================================================
+
+
+class LabelInline(admin.TabularInline):
+	model = Label
+	extra = 1
+
+
+@admin.register(LabelCategory)
+class LabelCategoryAdmin(admin.ModelAdmin):
+	list_display = ("name", "icon", "color", "label_count")
+	search_fields = ("name",)
+	inlines = [LabelInline]
+
+	def label_count(self, obj):
+		return obj.labels.count()
+	label_count.short_description = "Labels"
+
+
+@admin.register(Label)
+class LabelAdmin(admin.ModelAdmin):
+	list_display = ("name", "category", "color_preview")
+	list_filter = ("category",)
+	search_fields = ("name", "category__name")
+
+	def color_preview(self, obj):
+		from django.utils.html import format_html
+		return format_html(
+			'<span style="background:{}; color:white; padding:2px 8px; border-radius:4px;">{} {}</span>',
+			obj.color, obj.icon, obj.name
+		)
+	color_preview.short_description = "Preview"
+
+
+# =============================================================================
+# Existing Admin Classes
+# =============================================================================
 
 
 @admin.register(StoryHistory)
@@ -71,8 +112,8 @@ class CostFactorAdmin(admin.ModelAdmin):
 class StoryAdmin(admin.ModelAdmin):
 	# We build a dynamic ModelForm in `get_form` so the admin accepts
 	# generated field names (vf_<id>) when validating fieldsets.
-	list_display = ("title", "epic", "goal")
-	list_filter = ("epic",)
+	list_display = ("title", "goal")
+	list_filter = ("archived", "status")
 
 	def get_form(self, request, obj=None, **kwargs):
 		# Build a ModelForm subclass with one ModelChoiceField per ValueFactor
@@ -144,7 +185,7 @@ class StoryAdmin(admin.ModelAdmin):
 
 	def get_fieldsets(self, request, obj=None):
 		# Base story fields
-		base_fields = ("epic", "title", "target", "workitems")
+		base_fields = ("title", "goal", "workitems")
 		fieldsets = [(None, {"fields": base_fields})]
 
 		# Add a fieldset per section with that section's valuefactors

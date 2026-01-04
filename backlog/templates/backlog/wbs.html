@@ -1,5 +1,5 @@
 {% extends 'backlog/base.html' %}
-{% load static %}
+{% load static icon_tags %}
 {% block title %}WBS — WoS{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -16,13 +16,7 @@
 </div>
 
 <form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-	<label for="epic-select">📁 Epic:</label>
-	<select id="epic-select" name="epic" onchange="this.form.submit()">
-		<option value="">All Epics</option>
-		{% for e in all_epics %}
-			<option value="{{ e.id }}" {% if e.id|stringformat:"s" == epic_id|stringformat:"s" %}selected{% endif %}>{{ e.title }}</option>
-		{% endfor %}
-	</select>
+	{% include 'backlog/_label_filter.html' %}
 	<button class="btn" type="submit">Filter</button>
 </form>
 
@@ -34,14 +28,14 @@
 		<select id="dep-story-select">
 			<option value="">Select a story...</option>
 			{% for s in all_stories %}
-				<option value="{{ s.id }}">{{ s.epic.title }} → {{ s.title }}</option>
+				<option value="{{ s.id }}">{{ s.title }}</option>
 			{% endfor %}
 		</select>
 		<span class="form-label">depends on</span>
 		<select id="dep-depends-on-select">
 			<option value="">Select a story...</option>
 			{% for s in all_stories %}
-				<option value="{{ s.id }}">{{ s.epic.title }} → {{ s.title }}</option>
+				<option value="{{ s.id }}">{{ s.title }}</option>
 			{% endfor %}
 		</select>
 		<button class="btn btn-primary" id="add-dep-btn">Add Dependency</button>
@@ -70,7 +64,6 @@
 			{% for story in gantt_data %}
 			<div class="gantt-row" data-id="{{ story.id }}" data-cost="{{ story.cost }}" data-cost-percent="{{ story.cost_percent }}">
 				<div class="gantt-label">
-					<span class="gantt-epic">{{ story.epic_title }}</span>
 					<a href="{% url 'backlog:story_detail' story.id %}" class="gantt-title">{{ story.title }}</a>
 				</div>
 				<div class="gantt-bar-container">
@@ -261,12 +254,6 @@
 	flex-direction: column;
 	gap: 2px;
 	padding-left: 8px;
-}
-.gantt-epic {
-	font-size: 10px;
-	color: var(--text-secondary);
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
 }
 .gantt-title {
 	font-size: 13px;

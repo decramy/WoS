@@ -134,3 +134,81 @@ def build_answers_with_undefined(answers_qs):
     """
     answers = list(answers_qs.order_by('score'))
     return [{'id': '', 'score': '—', 'description': 'Undefined'}] + answers
+
+
+def get_label_filter_context(request):
+    """Get label filter context data for templates.
+    
+    Parses the 'labels' GET parameter (comma-separated IDs) and returns
+    context data including all categories with their labels and the
+    set of selected label IDs.
+    
+    Args:
+        request: Django HTTP request object
+        
+    Returns:
+        Dict with:
+        - label_categories: List of categories with their labels
+        - selected_labels: Set of selected label IDs (as integers)
+        - selected_labels_objects: List of selected Label objects for display
+        - labels_param: Comma-separated string of selected label IDs for URL params
+    """
+    from ..models import Label, LabelCategory
+    
+    # Parse selected labels from URL parameter (format: labels=1,2,3)
+    labels_param = request.GET.get('labels', '').strip()
+    selected_labels = set()
+    if labels_param:
+        for lid in labels_param.split(','):
+            lid = lid.strip()
+            if lid.isdigit():
+                selected_labels.add(int(lid))
+    
+    # Get all categories with their labels, ordered
+    categories = LabelCategory.objects.prefetch_related('labels').order_by('name')
+    
+    label_categories = []
+    for cat in categories:
+        labels = list(cat.labels.order_by('name'))
+        if labels:  # Only include categories that have labels
+            label_categories.append({
+                'category': cat,
+                'labels': labels,
+            })
+    
+    # Get selected label objects for display (with category info)
+    selected_labels_objects = []
+    if selected_labels:
+        selected_labels_objects = list(
+            Label.objects.filter(id__in=selected_labels)
+            .select_related('category')
+            .order_by('category__name', 'name')
+        )
+    
+    return {
+        'label_categories': label_categories,
+        'selected_labels': selected_labels,
+        'selected_labels_objects': selected_labels_objects,
+        'labels_param': labels_param,
+    }
+
+
+def apply_label_filter(queryset, selected_labels):
+    """Apply label filter to a Story queryset.
+    
+    Filters stories that have ALL of the selected labels (AND logic).
+    Returns distinct results to avoid duplicates.
+    
+    Args:
+        queryset: Story QuerySet to filter
+        selected_labels: Set or list of label IDs to filter by
+        
+    Returns:
+        Filtered Story QuerySet
+    """
+    if selected_labels:
+        # AND logic: story must have ALL selected labels
+        for label_id in selected_labels:
+            queryset = queryset.filter(labels__id=label_id)
+        queryset = queryset.distinct()
+    return queryset

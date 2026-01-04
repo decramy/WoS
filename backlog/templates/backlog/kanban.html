@@ -1,5 +1,5 @@
 {% extends 'backlog/base.html' %}
-{% load static %}
+{% load static icon_tags %}
 {% block title %}Kanban — WoS{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -16,13 +16,6 @@
 </div>
 
 <form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-	<label for="epic-select">📁 Epic:</label>
-	<select id="epic-select" name="epic" onchange="this.form.submit()">
-		<option value="">All Epics</option>
-		{% for e in all_epics %}
-			<option value="{{ e.id }}" {% if e.id|stringformat:"s" == epic_id|stringformat:"s" %}selected{% endif %}>{{ e.title }}</option>
-		{% endfor %}
-	</select>
 	<label for="sort-select">Sort:</label>
 	<select id="sort-select" name="sort" onchange="this.form.submit()">
 		<option value="result" {% if sort == 'result' %}selected{% endif %}>Score Result</option>
@@ -35,6 +28,7 @@
 		<option value="desc" {% if order == 'desc' %}selected{% endif %}>Desc</option>
 		<option value="asc" {% if order == 'asc' %}selected{% endif %}>Asc</option>
 	</select>
+	{% include 'backlog/_label_filter.html' %}
 	<button class="btn" type="submit">Filter</button>
 </form>
 
@@ -53,6 +47,8 @@
 	.kanban-card .score{font-size:13px;font-weight:700;color:var(--accent);margin-top:4px}
 	.kanban-card .score.high{color:var(--accent-2)}
 	.kanban-card .score.low{color:var(--danger)}
+	.kanban-card .card-labels{margin-top:6px;display:flex;flex-wrap:wrap;gap:3px}
+	.kanban-card .card-labels .label-shield{font-size:10px;padding:1px 5px}
 	@media (max-width: 1100px){.kanban-board{grid-template-columns:repeat(2,1fr)}}
 	@media (max-width: 700px){.kanban-board{grid-template-columns:1fr}}
 </style>
@@ -64,7 +60,7 @@
 			{% for card in columns.backlog %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
 					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
-					<div class="meta">{{ card.story.epic.title }}</div>
+					{% if card.story.labels.exists %}<div class="card-labels">{% for label in card.story.labels.all %}<span class="label-shield" style="--label-color:{{ label.category.color }}">{% render_icon label.category.icon %} {{ label.name }}</span>{% endfor %}</div>{% endif %}
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>
 			{% endfor %}
@@ -76,7 +72,7 @@
 			{% for card in columns.planned %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
 					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
-					<div class="meta">{{ card.story.epic.title }}</div>
+					{% if card.story.labels.exists %}<div class="card-labels">{% for label in card.story.labels.all %}<span class="label-shield" style="--label-color:{{ label.category.color }}">{% render_icon label.category.icon %} {{ label.name }}</span>{% endfor %}</div>{% endif %}
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>
 			{% endfor %}
@@ -88,7 +84,7 @@
 			{% for card in columns.doing %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
 					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
-					<div class="meta">{{ card.story.epic.title }}</div>
+					{% if card.story.labels.exists %}<div class="card-labels">{% for label in card.story.labels.all %}<span class="label-shield" style="--label-color:{{ label.category.color }}">{% render_icon label.category.icon %} {{ label.name }}</span>{% endfor %}</div>{% endif %}
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>
 			{% endfor %}
@@ -100,8 +96,8 @@
 			{% for card in columns.blocked %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
 					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
-					<div class="meta">{{ card.story.epic.title }}</div>
 					<div class="meta" style="color:var(--danger)">{{ card.story.blocked|truncatechars:50 }}</div>
+					{% if card.story.labels.exists %}<div class="card-labels">{% for label in card.story.labels.all %}<span class="label-shield" style="--label-color:{{ label.category.color }}">{% render_icon label.category.icon %} {{ label.name }}</span>{% endfor %}</div>{% endif %}
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>
 			{% endfor %}
@@ -113,7 +109,7 @@
 			{% for card in columns.done %}
 				<div class="kanban-card" draggable="true" data-id="{{ card.story.id }}">
 					<div class="title"><a href="{% url 'backlog:story_detail' card.story.id %}">{{ card.story.title }}</a></div>
-					<div class="meta">{{ card.story.epic.title }}</div>
+					{% if card.story.labels.exists %}<div class="card-labels">{% for label in card.story.labels.all %}<span class="label-shield" style="--label-color:{{ label.category.color }}">{% render_icon label.category.icon %} {{ label.name }}</span>{% endfor %}</div>{% endif %}
 					<div class="score {% if card.result >= 2 %}high{% elif card.result < 1 %}low{% endif %}">Score: {{ card.result }}</div>
 				</div>
 			{% endfor %}

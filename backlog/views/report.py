@@ -9,10 +9,10 @@ from django.shortcuts import render
 
 from ..models import (
     CostFactorSection,
-    Epic,
     Story,
     ValueFactorSection,
 )
+from .helpers import apply_label_filter, get_label_filter_context
 
 
 def report_view(request):
@@ -25,13 +25,14 @@ def report_view(request):
     - Result = total value / total cost (WSJF score)
     
     Features:
-    - Filter by epic or computed status
+    - Filter by computed status
+    - Filter by labels (multi-select with OR logic)
     - Tooltips showing factor breakdown for each section
     - Tweak mode for temporary score adjustments
     """
-    epic_id = request.GET.get('epic')
+    # Get label filter context
+    label_filter_ctx = get_label_filter_context(request)
     status_filter = request.GET.get('status', '')
-    all_epics = Epic.objects.filter(archived=False).order_by('title')
     
     value_sections = list(
         ValueFactorSection.objects.prefetch_related("valuefactors").order_by("name")
@@ -41,14 +42,13 @@ def report_view(request):
     )
 
     stories_qs = (
-        Story.objects.filter(archived=False).select_related("epic").prefetch_related("scores__answer", "cost_scores__answer").order_by(
-            "epic__title",
+        Story.objects.filter(archived=False).prefetch_related("scores__answer", "cost_scores__answer", "labels__category").order_by(
             "title",
         )
     )
     
-    if epic_id:
-        stories_qs = stories_qs.filter(epic_id=epic_id)
+    # Apply label filter
+    stories_qs = apply_label_filter(stories_qs, label_filter_ctx['selected_labels'])
     
     # Status filtering requires post-processing since computed_status is a property
     if status_filter:
@@ -226,28 +226,41 @@ def report_view(request):
         "value_sections": value_sections,
         "cost_sections": cost_sections,
         "rows": rows,
-        # total columns for the table: Epic, Story, Status, per-value-sections, Total Value,
+        # total columns for the table: Story, Status, per-value-sections, Total Value,
         # per-cost-sections, Total Cost, Result
-        "total_cols": 6 + len(value_sections) + len(cost_sections),
-        "all_epics": all_epics,
-        "epic_id": epic_id,
+        "total_cols": 5 + len(value_sections) + len(cost_sections),
         "status_filter": status_filter,
+        # Label filter context
+        "label_categories": label_filter_ctx['label_categories'],
+        "selected_labels": label_filter_ctx['selected_labels'],
+        "selected_labels_objects": label_filter_ctx['selected_labels_objects'],
+        "labels_param": label_filter_ctx['labels_param'],
     }
     return render(request, "backlog/report.html", context)
 
 
-def _calculate_story_score(story):
+def _calculate_story_score(story, value_sections=None, cost_sections=None):
     """Calculate value/cost result for a story (same as report logic).
     
     Score = sum of section averages for value / sum of section averages for cost
-    """
-    # Get all sections
-    value_sections = ValueFactorSection.objects.prefetch_related("valuefactors").all()
-    cost_sections = CostFactorSection.objects.prefetch_related("costfactors").all()
     
-    # Build maps of factor id -> score
-    vf_map = {sv.valuefactor_id: sv.answer.score for sv in story.scores.select_related('answer').all() if sv.answer}
-    cf_map = {sc.costfactor_id: sc.answer.score for sc in story.cost_scores.select_related('answer').all() if sc.answer}
+    Args:
+        story: Story instance with prefetched scores/cost_scores
+        value_sections: Optional pre-loaded ValueFactorSection queryset
+        cost_sections: Optional pre-loaded CostFactorSection queryset
+        
+    If sections are not provided, they will be loaded from database.
+    For batch processing, pass pre-loaded sections to avoid N+1 queries.
+    """
+    # Get all sections (use provided or load from DB)
+    if value_sections is None:
+        value_sections = ValueFactorSection.objects.prefetch_related("valuefactors").all()
+    if cost_sections is None:
+        cost_sections = CostFactorSection.objects.prefetch_related("costfactors").all()
+    
+    # Build maps of factor id -> score (use prefetched data if available)
+    vf_map = {sv.valuefactor_id: sv.answer.score for sv in story.scores.all() if sv.answer}
+    cf_map = {sc.costfactor_id: sc.answer.score for sc in story.cost_scores.all() if sc.answer}
     
     # Calculate value section averages and sum them
     value_section_avgs = []

@@ -12,33 +12,33 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_POST
 
-from ..models import Epic, Story, StoryDependency
+from ..models import Story, StoryDependency
+from .helpers import apply_label_filter, get_label_filter_context
 
 
 def wbs_view(request):
     """Work Breakdown Structure showing stories with dependencies.
     
     Displays:
-    - Stories grouped by epic in a grid layout
+    - Stories in a grid layout
     - Dependency relationships between stories
     - Gantt-style bars showing relative cost/effort
     
-    Supports filtering by epic and AJAX dependency management.
+    Supports AJAX dependency management.
+    Supports filtering by labels (multi-select with OR logic).
     """
-    epic_id = request.GET.get('epic', '')
-    all_epics = Epic.objects.filter(archived=False).order_by('title')
+    # Get label filter context
+    label_filter_ctx = get_label_filter_context(request)
     
-    # Get stories based on filter (exclude archived)
-    if epic_id:
-        stories_qs = Story.objects.filter(epic_id=epic_id, archived=False).select_related('epic').prefetch_related(
-            'dependencies__depends_on', 'dependents__story', 'cost_scores__answer'
-        )
-    else:
-        stories_qs = Story.objects.filter(archived=False).select_related('epic').prefetch_related(
-            'dependencies__depends_on', 'dependents__story', 'cost_scores__answer'
-        )
+    # Get stories (exclude archived)
+    stories_qs = Story.objects.filter(archived=False).prefetch_related(
+        'dependencies__depends_on', 'dependents__story', 'cost_scores__answer', 'labels__category'
+    )
     
-    stories_qs = stories_qs.order_by('epic__title', 'title')
+    # Apply label filter
+    stories_qs = apply_label_filter(stories_qs, label_filter_ctx['selected_labels'])
+    
+    stories_qs = stories_qs.order_by('title')
     
     # Calculate max cost for scaling the Gantt bars
     max_cost = 1  # minimum to avoid division by zero
@@ -54,37 +54,22 @@ def wbs_view(request):
     dependencies_data = []
     gantt_data = []  # For the Gantt chart
     
-    # Group stories by epic for layout
-    epics_with_stories = {}
-    for story in stories_qs:
-        epic_title = story.epic.title
-        if epic_title not in epics_with_stories:
-            epics_with_stories[epic_title] = []
-        epics_with_stories[epic_title].append(story)
-    
-    # Assign positions - grid layout by epic
-    story_positions = {}
-    col = 0
-    for epic_title, epic_stories in epics_with_stories.items():
-        for row, story in enumerate(epic_stories):
-            story_positions[story.id] = {'col': col, 'row': row}
-            cost = story_costs.get(story.id, 0)
-            cost_percent = (cost / max_cost * 100) if max_cost > 0 else 0
-            
-            story_entry = {
-                'id': story.id,
-                'title': story.title,
-                'epic_id': story.epic.id,
-                'epic_title': epic_title,
-                'status': story.computed_status,
-                'col': col,
-                'row': row,
-                'cost': cost,
-                'cost_percent': cost_percent,
-            }
-            stories_data.append(story_entry)
-            gantt_data.append(story_entry)
-        col += 1
+    # Assign positions - simple row layout
+    for row, story in enumerate(stories_qs):
+        cost = story_costs.get(story.id, 0)
+        cost_percent = (cost / max_cost * 100) if max_cost > 0 else 0
+        
+        story_entry = {
+            'id': story.id,
+            'title': story.title,
+            'status': story.computed_status,
+            'col': 0,
+            'row': row,
+            'cost': cost,
+            'cost_percent': cost_percent,
+        }
+        stories_data.append(story_entry)
+        gantt_data.append(story_entry)
     
     # Build dependencies list
     for story in stories_qs:
@@ -95,11 +80,9 @@ def wbs_view(request):
             })
     
     # All stories for the dropdown (unfiltered)
-    all_stories = Story.objects.all().select_related('epic').order_by('epic__title', 'title')
+    all_stories = Story.objects.all().order_by('title')
     
     context = {
-        'all_epics': all_epics,
-        'epic_id': epic_id,
         'stories': stories_data,
         'dependencies': dependencies_data,
         'all_stories': all_stories,
@@ -107,6 +90,11 @@ def wbs_view(request):
         'max_cost': max_cost,
         'stories_json': json.dumps(stories_data),
         'dependencies_json': json.dumps(dependencies_data),
+        # Label filter context
+        'label_categories': label_filter_ctx['label_categories'],
+        'selected_labels': label_filter_ctx['selected_labels'],
+        'selected_labels_objects': label_filter_ctx['selected_labels_objects'],
+        'labels_param': label_filter_ctx['labels_param'],
     }
     return render(request, 'backlog/wbs.html', context)
 

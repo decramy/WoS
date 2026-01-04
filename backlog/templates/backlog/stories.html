@@ -1,5 +1,5 @@
 {% extends 'backlog/base.html' %}
-{% load static %}
+{% load static icon_tags %}
 
 {% block title %}Stories — WoS{% endblock %}
 
@@ -11,7 +11,7 @@
       <a class="btn" href="{% url 'backlog:stories' %}">← Active Stories</a>
     {% else %}
       <a class="btn" href="{% url 'backlog:stories' %}?archived=1">📦 View Archived</a>
-      <a class="btn" href="{% url 'backlog:story_create' %}?next={{ request.get_full_path|urlencode }}{% if epic_id %}&epic={{ epic_id }}{% endif %}">➕ Create Story</a>
+      <a class="btn" href="{% url 'backlog:story_create' %}?next={{ request.get_full_path|urlencode }}">➕ Create Story</a>
     {% endif %}
   </div>
 </div>
@@ -28,13 +28,6 @@
 
 <form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
   {% if show_archived %}<input type="hidden" name="archived" value="1">{% endif %}
-  <label for="epic-select">📁 Epic:</label>
-  <select id="epic-select" name="epic" onchange="this.form.submit()">
-    <option value="">All Epics</option>
-    {% for e in all_epics %}
-      <option value="{{ e.id }}" {% if e.id|stringformat:"s" == epic_id|stringformat:"s" %}selected{% endif %}>{{ e.title }}</option>
-    {% endfor %}
-  </select>
   <label for="status-select">🏷️ Status:</label>
   <select id="status-select" name="status" onchange="this.form.submit()">
     <option value="">All Statuses</option>
@@ -48,6 +41,7 @@
     <option value="yes" {% if review_filter == 'yes' %}selected{% endif %}>Required</option>
     <option value="no" {% if review_filter == 'no' %}selected{% endif %}>Not Required</option>
   </select>
+  {% include 'backlog/_label_filter.html' %}
   <input name="q" placeholder="🔍 Search stories..." value="{{ q }}">
   <button class="btn" type="submit">Filter</button>
 </form>
@@ -56,19 +50,13 @@
     <tr>
       <th>Actions</th>
       <th>
-        <a href="?{% if q %}q={{ q }}&{% endif %}{% if epic_id %}epic={{ epic_id }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=epic&order={% if sort == 'epic' and order == 'asc' %}desc{% else %}asc{% endif %}">
-          📁 Epic
-          {% if sort == 'epic' %}{% if order == 'asc' %} ▲ {% else %} ▼ {% endif %}{% endif %}
-        </a>
-      </th>
-      <th>
-        <a href="?{% if q %}q={{ q }}&{% endif %}{% if epic_id %}epic={{ epic_id }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=title&order={% if sort == 'title' and order == 'asc' %}desc{% else %}asc{% endif %}">
+        <a href="?{% if q %}q={{ q }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if labels_param %}labels={{ labels_param }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=title&order={% if sort == 'title' and order == 'asc' %}desc{% else %}asc{% endif %}">
           Story
           {% if sort == 'title' %}{% if order == 'asc' %} ▲ {% else %} ▼ {% endif %}{% endif %}
         </a>
       </th>
       <th>
-        <a href="?{% if q %}q={{ q }}&{% endif %}{% if epic_id %}epic={{ epic_id }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=status&order={% if sort == 'status' and order == 'asc' %}desc{% else %}asc{% endif %}">
+        <a href="?{% if q %}q={{ q }}&{% endif %}{% if status_filter %}status={{ status_filter }}&{% endif %}{% if review_filter %}review={{ review_filter }}&{% endif %}{% if labels_param %}labels={{ labels_param }}&{% endif %}{% if show_archived %}archived=1&{% endif %}sort=status&order={% if sort == 'status' and order == 'asc' %}desc{% else %}asc{% endif %}">
           🏷️ Status
           {% if sort == 'status' %}{% if order == 'asc' %} ▲ {% else %} ▼ {% endif %}{% endif %}
         </a>
@@ -76,6 +64,7 @@
       <th title="Story details complete (title, goal, workitems)">📝</th>
       <th title="All WSJF score factors defined">📊</th>
       <th title="Review required">🚩</th>
+      <th>Labels</th>
     </tr>
   </thead>
   <tbody>
@@ -111,12 +100,23 @@
             <button type="submit" title="Delete story" style="background:none;border:0;padding:0;margin:0;cursor:pointer;">🗑️</button>
           </form>
         </td>
-        <td style="color:var(--muted);">{{ item.story.epic.title }}</td>
         <td><a href="{% url 'backlog:story_detail' item.story.id %}?next={{ request.get_full_path|urlencode }}" class="table-link">{% if item.story.review_required %}🚩 {% endif %}{{ item.story.title }}</a></td>
         <td><strong class="status-{{ item.story.computed_status }}">{{ item.story.computed_status|upper }}</strong></td>
         <td style="text-align:center;">{% if item.details_complete %}<span style="color:var(--accent-2);" title="✓ Details complete">✅</span>{% else %}<span style="color:var(--danger);" title="✗ Missing: title, goal or workitems">⚠️</span>{% endif %}</td>
         <td style="text-align:center;">{% if item.scores_complete %}<span style="color:var(--accent-2);" title="✓ All scores defined">✅</span>{% else %}<span style="color:var(--danger);" title="✗ Some scores undefined">⚠️</span>{% endif %}</td>
         <td style="text-align:center;">{% if item.story.review_required %}<span style="color:var(--warning);" title="Review required">🚩</span>{% else %}—{% endif %}</td>
+        <td>
+          {% if item.story.labels.exists %}
+          <div class="labels-container">
+            {% for label in item.story.labels.all %}
+            <span class="label-shield" style="--label-color: {{ label.category.color }};" title="{{ label.category.name }}: {{ label.name }}">
+              <span class="label-icon">{% render_icon label.category.icon %}</span>
+              <span class="label-text">{{ label.name }}</span>
+            </span>
+            {% endfor %}
+          </div>
+          {% else %}—{% endif %}
+        </td>
       </tr>
     {% empty %}
       <tr>
