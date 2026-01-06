@@ -88,8 +88,9 @@ class AnswerModelChoiceField(forms.ModelChoiceField):
 
 @admin.register(ValueFactor)
 class ValueFactorAdmin(admin.ModelAdmin):
-	list_display = ("name", "section")
-	list_filter = ("section",)
+	list_display = ("name", "section", "scoring_mode")
+	list_filter = ("section", "scoring_mode")
+	list_editable = ("scoring_mode",)
 	inlines = [ValueFactorAnswerInline]
 
 
@@ -100,8 +101,9 @@ class CostFactorAnswerInline(admin.TabularInline):
 
 @admin.register(CostFactor)
 class CostFactorAdmin(admin.ModelAdmin):
-	list_display = ("name", "section")
-	list_filter = ("section",)
+	list_display = ("name", "section", "scoring_mode")
+	list_filter = ("section", "scoring_mode")
+	list_editable = ("scoring_mode",)
 	inlines = [CostFactorAnswerInline]
 
 

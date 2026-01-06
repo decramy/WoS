@@ -1,0 +1,271 @@
+{% extends 'backlog/base.html' %}
+{% load static icon_tags %}
+
+{% block title %}Hybrid Report — WoS{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h2>🔀 Hybrid Score Report</h2>
+  <div class="page-actions">
+    {% if has_any_relative %}<a class="btn" href="{% url 'backlog:relative' %}">🔢 Edit Rankings</a>{% endif %}
+    <a class="btn" href="{% url 'backlog:report' %}">📊 Absolute Report</a>
+    <a class="btn" href="{% url 'backlog:stories' %}">📋 Stories</a>
+  </div>
+</div>
+
+<div class="page-hint">
+  <strong>💡 Hybrid WSJF:</strong> Combines absolute scores and relative rankings per factor.
+  Factors set to "absolute" use their answer score. Factors set to "relative" use rankings (rank #1 = best).
+  <strong>Result = Value ÷ Cost</strong> — higher is better!
+  {% if has_any_relative %}<a href="{% url 'backlog:relative' %}">→ Edit relative rankings</a>{% endif %}
+</div>
+
+<form method="get" class="filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  <label for="status-select">🏷️ Status:</label>
+  <select id="status-select" name="status" onchange="this.form.submit()">
+    <option value="">All Statuses</option>
+    <option value="idea" {% if status_filter == 'idea' %}selected{% endif %}>IDEA</option>
+    <option value="ready" {% if status_filter == 'ready' %}selected{% endif %}>READY</option>
+    <option value="planned" {% if status_filter == 'planned' %}selected{% endif %}>PLANNED</option>
+    <option value="started" {% if status_filter == 'started' %}selected{% endif %}>STARTED</option>
+    <option value="blocked" {% if status_filter == 'blocked' %}selected{% endif %}>BLOCKED</option>
+    <option value="done" {% if status_filter == 'done' %}selected{% endif %}>DONE</option>
+  </select>
+  {% include 'backlog/_label_filter.html' %}
+</form>
+
+<table class="overview-table" id="report-table" style="margin-top:12px;">
+  <thead>
+    <tr>
+      <th class="sortable">
+        📋 Story <span class="sort-icon"></span>
+      </th>
+      <th class="sortable">
+        🏷️ Status <span class="sort-icon"></span>
+      </th>
+      {% for vs in value_sections %}
+        <th class="sortable" title="Value: {{ vs.name }}">
+          V: {{ vs.name|truncatechars:12 }} <span class="sort-icon"></span>
+        </th>
+      {% endfor %}
+      <th class="sortable" title="Total Value Score">
+        💎 Value <span class="sort-icon"></span>
+      </th>
+      {% for cs in cost_sections %}
+        <th class="sortable" title="Cost: {{ cs.name }}">
+          C: {{ cs.name|truncatechars:12 }} <span class="sort-icon"></span>
+        </th>
+      {% endfor %}
+      <th class="sortable" title="Total Cost Score">
+        ⚡ Cost <span class="sort-icon"></span>
+      </th>
+      <th class="sortable" title="Hybrid WSJF Result (Value ÷ Cost)">
+        🎯 Result <span class="sort-icon"></span>
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+      <tr data-result="{% if r.result is not None %}{{ r.result }}{% endif %}" {% if not r.has_scores %}class="no-scores"{% endif %}>
+        <td>
+          <div class="story-title-cell">
+            <a href="{% url 'backlog:story_detail' r.story.id %}" class="table-link">{% if r.story.review_required %}<span class="review-flag" title="Review required">🚩</span> {% endif %}{{ r.story.title|truncatechars:30 }}</a>
+            {% if r.story.labels.exists %}
+            <div class="labels-row">
+              {% for label in r.story.labels.all %}
+              <span class="label-shield label-small" style="--label-color: {{ label.category.color }};" title="{{ label.category.name }}: {{ label.name }}">
+                <span class="label-icon">{% render_icon label.category.icon %}</span>
+                <span class="label-text">{{ label.name }}</span>
+              </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </td>
+        <td class="status-{{ r.story.computed_status }}" data-value="{{ r.story.computed_status }}">
+          {{ r.story.computed_status|upper }}
+        </td>
+        {% for section_data in r.value_section_data %}
+          <td class="score-cell" data-value="{% if section_data.avg is not None %}{{ section_data.avg }}{% else %}-999{% endif %}" style="text-align:center;" title="{{ section_data.tooltip }}">
+            {% if section_data.avg is not None %}
+              {{ section_data.avg|floatformat:1 }}
+            {% else %}
+              <span style="color:var(--muted);">—</span>
+            {% endif %}
+          </td>
+        {% endfor %}
+        <td class="value-total-cell" data-value="{{ r.value_sum }}" style="text-align:center;font-weight:600;" title="{{ r.value_total_tooltip }}">
+          {% if r.value_sum %}
+            {{ r.value_sum|floatformat:1 }}
+          {% else %}
+            <span style="color:var(--muted);">—</span>
+          {% endif %}
+        </td>
+        {% for section_data in r.cost_section_data %}
+          <td class="score-cell" data-value="{% if section_data.avg is not None %}{{ section_data.avg }}{% else %}999{% endif %}" style="text-align:center;" title="{{ section_data.tooltip }}">
+            {% if section_data.avg is not None %}
+              {{ section_data.avg|floatformat:1 }}
+            {% else %}
+              <span style="color:var(--muted);">—</span>
+            {% endif %}
+          </td>
+        {% endfor %}
+        <td class="cost-total-cell" data-value="{{ r.cost_sum }}" style="text-align:center;font-weight:600;" title="{{ r.cost_total_tooltip }}">
+          {% if r.cost_sum %}
+            {{ r.cost_sum|floatformat:1 }}
+          {% else %}
+            <span style="color:var(--muted);">—</span>
+          {% endif %}
+        </td>
+        <td class="result-cell" data-value="{% if r.result is not None %}{{ r.result }}{% else %}-999{% endif %}" style="text-align:center;" title="{{ r.result_tooltip }}">
+          {% if r.result is None %}
+            <span style="color:var(--muted);">—</span>
+          {% else %}
+            <strong>{{ r.result|floatformat:2 }}</strong>
+          {% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr>
+        <td colspan="{{ total_cols }}">
+          <div class="empty-state">
+            <div class="empty-icon">🔢</div>
+            <div class="empty-text">No stories found</div>
+            <div class="empty-hint">Create some stories and <a href="{% url 'backlog:relative' %}">rank them</a> to see results here.</div>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<style>
+  /* Sortable header styling */
+  .overview-table th.sortable { 
+    cursor: pointer; 
+    user-select: none; 
+    transition: background 0.15s; 
+    white-space: nowrap;
+  }
+  .overview-table th.sortable:hover { background: var(--surface); }
+  .overview-table th .sort-icon { font-size: 10px; margin-left: 4px; opacity: 0.4; }
+  .overview-table th.sort-asc .sort-icon::after { content: '▲'; opacity: 1; }
+  .overview-table th.sort-desc .sort-icon::after { content: '▼'; opacity: 1; }
+  
+  /* Result cell emphasis */
+  .result-cell { font-weight: 600; }
+  
+  /* Rows without scores */
+  .no-scores {
+    opacity: 0.6;
+  }
+  .no-scores td {
+    background: var(--surface) !important;
+  }
+  
+  /* Row gradient colors will be applied via JS */
+  #report-table tbody tr {
+    transition: background 0.2s;
+  }
+</style>
+
+<script>
+(function() {
+  var table = document.getElementById('report-table');
+  if (!table) return;
+  
+  // Color rows based on result
+  function colorRows() {
+    var rows = table.querySelectorAll('tbody tr[data-result]');
+    var results = [];
+    
+    rows.forEach(function(row) {
+      var resultVal = parseFloat(row.dataset.result);
+      if (!isNaN(resultVal)) {
+        results.push({ row: row, result: resultVal });
+      }
+    });
+    
+    if (results.length === 0) return;
+    
+    // Sort by result descending
+    results.sort(function(a, b) { return b.result - a.result; });
+    
+    var count = results.length;
+    results.forEach(function(item, index) {
+      var pct = index / (count - 1 || 1);
+      // Green (good) to red (bad) gradient
+      var hue = 120 - (pct * 120); // 120=green, 0=red
+      item.row.style.background = 'hsla(' + hue + ', 60%, 50%, 0.1)';
+    });
+  }
+  
+  // Sorting functionality
+  var headers = table.querySelectorAll('th.sortable');
+  var currentSort = { col: -1, dir: 'desc' };
+  
+  headers.forEach(function(th, colIndex) {
+    th.addEventListener('click', function() {
+      // Toggle direction if same column
+      if (currentSort.col === colIndex) {
+        currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.col = colIndex;
+        currentSort.dir = 'desc';
+      }
+      
+      // Update header classes
+      headers.forEach(function(h) { h.classList.remove('sort-asc', 'sort-desc'); });
+      th.classList.add('sort-' + currentSort.dir);
+      
+      // Sort rows
+      sortTable(colIndex, currentSort.dir);
+    });
+  });
+  
+  function sortTable(colIndex, direction) {
+    var tbody = table.querySelector('tbody');
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    rows.sort(function(a, b) {
+      var aCell = a.cells[colIndex];
+      var bCell = b.cells[colIndex];
+      
+      // Get sortable value from data-value attribute or cell text
+      var aVal = aCell.dataset.value !== undefined ? aCell.dataset.value : aCell.textContent.trim();
+      var bVal = bCell.dataset.value !== undefined ? bCell.dataset.value : bCell.textContent.trim();
+      
+      // Try numeric comparison
+      var aNum = parseFloat(aVal);
+      var bNum = parseFloat(bVal);
+      
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return direction === 'asc' ? aNum - bNum : bNum - aNum;
+      }
+      
+      // String comparison
+      if (direction === 'asc') {
+        return aVal.localeCompare(bVal);
+      } else {
+        return bVal.localeCompare(aVal);
+      }
+    });
+    
+    // Re-append rows in sorted order
+    rows.forEach(function(row) {
+      tbody.appendChild(row);
+    });
+    
+    // Re-color rows after sorting
+    colorRows();
+  }
+  
+  // Initial coloring
+  colorRows();
+  
+  // Sort by result descending by default
+  var resultColIndex = headers.length - 1;
+  headers[resultColIndex].click();
+})();
+</script>
+{% endblock %}

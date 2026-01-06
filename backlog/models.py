@@ -232,9 +232,22 @@ class ValueFactorSection(models.Model):
 
 class ValueFactor(models.Model):
     """A single value factor that belongs to a section."""
+    SCORING_ABSOLUTE = 'absolute'
+    SCORING_RELATIVE = 'relative'
+    SCORING_CHOICES = [
+        (SCORING_ABSOLUTE, 'Absolute (use answer score)'),
+        (SCORING_RELATIVE, 'Relative (use ranking)'),
+    ]
+    
     section = models.ForeignKey(ValueFactorSection, related_name="valuefactors", on_delete=models.CASCADE)
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, help_text="Explains what this factor measures")
+    scoring_mode = models.CharField(
+        max_length=10,
+        choices=SCORING_CHOICES,
+        default=SCORING_ABSOLUTE,
+        help_text="How this factor contributes to the score: absolute uses answer scores, relative uses rankings"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -270,12 +283,17 @@ class StoryValueFactorScore(models.Model):
     - The answer must belong to the specified valuefactor
     - Each story can have only one score per valuefactor
     - answer=None means "undefined" (not yet scored)
+    - relative_rank is used for relative scoring (lower = higher priority)
     """
     story = models.ForeignKey(Story, related_name="scores", on_delete=models.CASCADE)
     valuefactor = models.ForeignKey(ValueFactor, related_name="scores", on_delete=models.CASCADE)
     answer = models.ForeignKey(
         ValueFactorAnswer, related_name="+", on_delete=models.PROTECT,
         null=True, blank=True, help_text="None means undefined/not yet scored"
+    )
+    relative_rank = models.IntegerField(
+        null=True, blank=True,
+        help_text="Relative ranking within this factor (1 = highest, None = not ranked)"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -316,9 +334,22 @@ class CostFactorSection(models.Model):
 
 class CostFactor(models.Model):
     """A single cost factor that belongs to a section."""
+    SCORING_ABSOLUTE = 'absolute'
+    SCORING_RELATIVE = 'relative'
+    SCORING_CHOICES = [
+        (SCORING_ABSOLUTE, 'Absolute (use answer score)'),
+        (SCORING_RELATIVE, 'Relative (use ranking)'),
+    ]
+    
     section = models.ForeignKey(CostFactorSection, related_name="costfactors", on_delete=models.CASCADE)
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, help_text="Explains what this factor measures")
+    scoring_mode = models.CharField(
+        max_length=10,
+        choices=SCORING_CHOICES,
+        default=SCORING_ABSOLUTE,
+        help_text="How this factor contributes to the score: absolute uses answer scores, relative uses rankings"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -354,12 +385,17 @@ class StoryCostFactorScore(models.Model):
     - The answer must belong to the specified costfactor
     - Each story can have only one score per costfactor
     - answer=None means "undefined" (not yet scored)
+    - relative_rank is used for relative scoring (lower = higher priority for cost)
     """
     story = models.ForeignKey(Story, related_name="cost_scores", on_delete=models.CASCADE)
     costfactor = models.ForeignKey(CostFactor, related_name="scores", on_delete=models.CASCADE)
     answer = models.ForeignKey(
         CostFactorAnswer, related_name="+", on_delete=models.PROTECT,
         null=True, blank=True, help_text="None means undefined/not yet scored"
+    )
+    relative_rank = models.IntegerField(
+        null=True, blank=True,
+        help_text="Relative ranking within this factor (1 = lowest cost, None = not ranked)"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

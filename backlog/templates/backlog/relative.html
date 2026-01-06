@@ -1,0 +1,545 @@
+{% extends 'backlog/base.html' %}
+{% load static %}
+
+{% block title %}Relative Ranking — WoS{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h2>📊 Relative Ranking</h2>
+  <div class="page-actions">
+    <a class="btn" href="{% url 'backlog:relative_report' %}">🔀 Hybrid Report</a>
+    <a class="btn" href="{% url 'backlog:report' %}">📈 Absolute Report</a>
+  </div>
+</div>
+
+<div class="page-hint">
+  <strong>💡 How it works:</strong> Select a scoring factor set to "relative" mode, then drag stories to rank them relative to each other.
+  Stories are initially grouped by their absolute score answer. Drag to reorder within or across groups.
+  <strong>Higher position = higher priority</strong> for value factors, <strong>higher position = lower cost</strong> for cost factors.
+  <br><small>💡 Set factors to "relative" mode in Django Admin to enable ranking for them.</small>
+</div>
+
+{% if not value_factors and not cost_factors %}
+<div class="empty-state" style="padding: 60px 20px;">
+  <div class="empty-icon">⚙️</div>
+  <div class="empty-text">No factors configured for relative ranking</div>
+  <div class="empty-hint">
+    Go to <a href="{% url 'admin:index' %}">Django Admin</a> and set some Value or Cost factors to "Relative" scoring mode.
+  </div>
+</div>
+{% else %}
+<form method="get" class="filters" style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+  <label>
+    <input type="radio" name="type" value="value" {% if factor_type == 'value' %}checked{% endif %} onchange="this.form.submit()">
+    💎 Value Factors
+  </label>
+  <label>
+    <input type="radio" name="type" value="cost" {% if factor_type == 'cost' %}checked{% endif %} onchange="this.form.submit()">
+    ⚡ Cost Factors
+  </label>
+  
+  <select name="factor" onchange="this.form.submit()" style="min-width:250px;">
+    <option value="">— Select a factor —</option>
+    {% if factor_type == 'value' %}
+      {% for vf in value_factors %}
+        <option value="{{ vf.id }}" {% if factor_id == vf.id|stringformat:"s" %}selected{% endif %}>
+          {{ vf.section.name }} → {{ vf.name }}
+        </option>
+      {% endfor %}
+    {% else %}
+      {% for cf in cost_factors %}
+        <option value="{{ cf.id }}" {% if factor_id == cf.id|stringformat:"s" %}selected{% endif %}>
+          {{ cf.section.name }} → {{ cf.name }}
+        </option>
+      {% endfor %}
+    {% endif %}
+  </select>
+</form>
+
+{% if selected_factor %}
+<div class="relative-ranking-container">
+  <div class="ranking-header">
+    <h3>{{ selected_factor.section.name }} → {{ selected_factor.name }}</h3>
+    {% if selected_factor.description %}
+    <p class="factor-description">{{ selected_factor.description }}</p>
+    {% endif %}
+    <div class="ranking-actions">
+      <button class="btn" id="save-rankings" disabled>💾 Save Rankings</button>
+      <button class="btn" id="reset-rankings">↩️ Reset</button>
+      <span id="save-status" style="margin-left:12px;"></span>
+    </div>
+  </div>
+  
+  <div class="ranking-legend">
+    <span class="legend-item legend-ranked">🔢 Ranked</span>
+    <span class="legend-item legend-undefined">❓ Undefined (needs ranking)</span>
+    <span class="legend-item legend-noscore">⊘ No Score (doesn't apply)</span>
+  </div>
+  
+  <div id="ranking-list" class="ranking-list">
+    <!-- Populated by JavaScript -->
+  </div>
+</div>
+
+<script>
+(function() {
+  var factorType = '{{ factor_type }}';
+  var factorId = {{ factor_id|default:"null" }};
+  var storiesData = {{ stories_data|safe }};
+  var hasChanges = false;
+  
+  var listEl = document.getElementById('ranking-list');
+  var saveBtn = document.getElementById('save-rankings');
+  var resetBtn = document.getElementById('reset-rankings');
+  var statusEl = document.getElementById('save-status');
+  
+  // The divider elements
+  var undefinedDivider = null;
+  var noScoreDivider = null;
+  
+  function renderList() {
+    listEl.innerHTML = '';
+    
+    if (!storiesData.ranked && !storiesData.undefined && !storiesData.no_score) {
+      listEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">Select a factor to start ranking</div></div>';
+      return;
+    }
+    
+    var ranked = storiesData.ranked || [];
+    var undefined_stories = storiesData.undefined || [];
+    var no_score = storiesData.no_score || [];
+    
+    // Render ranked stories first (with rank numbers)
+    ranked.forEach(function(story) {
+      var el = createStoryElement(story, 'ranked');
+      listEl.appendChild(el);
+    });
+    
+    // Add the "Undefined" divider bar
+    undefinedDivider = document.createElement('div');
+    undefinedDivider.className = 'zone-divider undefined-divider';
+    undefinedDivider.innerHTML = '<span class="divider-line"></span><span class="divider-label">❓ UNDEFINED — drag stories above to rank them</span><span class="divider-line"></span>';
+    listEl.appendChild(undefinedDivider);
+    
+    // Render undefined stories (need ranking)
+    undefined_stories.forEach(function(story) {
+      var el = createStoryElement(story, 'undefined');
+      listEl.appendChild(el);
+    });
+    
+    // Add the "No Score" divider bar
+    noScoreDivider = document.createElement('div');
+    noScoreDivider.className = 'zone-divider no-score-divider';
+    noScoreDivider.innerHTML = '<span class="divider-line"></span><span class="divider-label">⊘ NO SCORE — stories below don\'t apply to this factor</span><span class="divider-line"></span>';
+    listEl.appendChild(noScoreDivider);
+    
+    // Render no-score stories below the divider
+    no_score.forEach(function(story) {
+      var el = createStoryElement(story, 'no_score');
+      listEl.appendChild(el);
+    });
+    
+    setupDragDrop();
+    updateRankNumbers();
+  }
+  
+  function createStoryElement(story, zone) {
+    var el = document.createElement('div');
+    el.className = 'ranking-item zone-' + zone;
+    el.dataset.storyId = story.id;
+    el.dataset.answerScore = story.answer_score || '';
+    el.draggable = true;
+    
+    var rankDisplay = '—';
+    if (zone === 'ranked' && story.relative_rank) {
+      rankDisplay = story.relative_rank;
+    }
+    
+    el.innerHTML = 
+      '<span class="rank-number">' + rankDisplay + '</span>' +
+      '<span class="story-title">' + escapeHtml(story.title) + '</span>' +
+      '<span class="story-answer" title="Absolute score: ' + (story.answer_desc || 'Undefined') + '">' + 
+        (story.answer_score !== null ? story.answer_score : '—') + 
+      '</span>';
+    return el;
+  }
+  
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+  
+  function setupDragDrop() {
+    var items = listEl.querySelectorAll('.ranking-item');
+    var draggedItem = null;
+    
+    items.forEach(function(item) {
+      item.addEventListener('dragstart', function(e) {
+        draggedItem = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      
+      item.addEventListener('dragend', function(e) {
+        item.classList.remove('dragging');
+        draggedItem = null;
+        updateRankNumbers();
+        markChanged();
+      });
+      
+      item.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        
+        if (draggedItem && draggedItem !== item) {
+          var rect = item.getBoundingClientRect();
+          var midY = rect.top + rect.height / 2;
+          
+          if (e.clientY < midY) {
+            item.parentNode.insertBefore(draggedItem, item);
+          } else {
+            item.parentNode.insertBefore(draggedItem, item.nextSibling);
+          }
+        }
+      });
+    });
+    
+    // Allow dropping on both dividers
+    [undefinedDivider, noScoreDivider].forEach(function(divider) {
+      divider.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        
+        if (draggedItem) {
+          var rect = divider.getBoundingClientRect();
+          var midY = rect.top + rect.height / 2;
+          
+          if (e.clientY < midY) {
+            divider.parentNode.insertBefore(draggedItem, divider);
+          } else {
+            divider.parentNode.insertBefore(draggedItem, divider.nextSibling);
+          }
+        }
+      });
+    });
+  }
+  
+  function updateRankNumbers() {
+    var children = Array.from(listEl.children);
+    var undefinedIdx = children.indexOf(undefinedDivider);
+    var noScoreIdx = children.indexOf(noScoreDivider);
+    
+    var rank = 1;
+    
+    children.forEach(function(child, idx) {
+      if (!child.classList.contains('ranking-item')) return;
+      
+      var rankEl = child.querySelector('.rank-number');
+      
+      // Remove all zone classes
+      child.classList.remove('zone-ranked', 'zone-undefined', 'zone-no_score');
+      
+      if (idx < undefinedIdx) {
+        // Above undefined divider = ranked
+        rankEl.textContent = rank++;
+        child.classList.add('zone-ranked');
+      } else if (idx < noScoreIdx) {
+        // Between dividers = undefined
+        rankEl.textContent = '?';
+        child.classList.add('zone-undefined');
+      } else {
+        // Below no-score divider = no score
+        rankEl.textContent = '—';
+        child.classList.add('zone-no_score');
+      }
+    });
+  }
+  
+  function markChanged() {
+    hasChanges = true;
+    saveBtn.disabled = false;
+    statusEl.textContent = '⚠️ Unsaved changes';
+    statusEl.style.color = 'var(--warning)';
+  }
+  
+  function getRankings() {
+    var children = Array.from(listEl.children);
+    var undefinedIdx = children.indexOf(undefinedDivider);
+    var noScoreIdx = children.indexOf(noScoreDivider);
+    var rankings = [];
+    var rank = 1;
+    
+    children.forEach(function(child, idx) {
+      if (child.classList.contains('ranking-item')) {
+        var storyId = parseInt(child.dataset.storyId);
+        if (idx < undefinedIdx) {
+          // Above undefined divider = ranked (positive integer)
+          rankings.push({ story_id: storyId, rank: rank++ });
+        } else if (idx < noScoreIdx) {
+          // Between dividers = undefined (null)
+          rankings.push({ story_id: storyId, rank: null });
+        } else {
+          // Below no-score divider = no score (0)
+          rankings.push({ story_id: storyId, rank: 0 });
+        }
+      }
+    });
+    
+    return rankings;
+  }
+  
+  saveBtn.addEventListener('click', function() {
+    var rankings = getRankings();
+    saveBtn.disabled = true;
+    statusEl.textContent = '💾 Saving...';
+    statusEl.style.color = 'var(--muted)';
+    
+    fetch('{% url "backlog:relative_save" %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}'
+      },
+      body: JSON.stringify({
+        factor_type: factorType,
+        factor_id: factorId,
+        rankings: rankings
+      })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.success) {
+        hasChanges = false;
+        statusEl.textContent = '✅ Saved!';
+        statusEl.style.color = 'var(--accent-2)';
+        setTimeout(function() {
+          statusEl.textContent = '';
+        }, 2000);
+      } else {
+        throw new Error(data.error || 'Save failed');
+      }
+    })
+    .catch(function(err) {
+      saveBtn.disabled = false;
+      statusEl.textContent = '❌ ' + err.message;
+      statusEl.style.color = 'var(--danger)';
+    });
+  });
+  
+  resetBtn.addEventListener('click', function() {
+    if (hasChanges && !confirm('Discard unsaved changes?')) return;
+    window.location.reload();
+  });
+  
+  window.addEventListener('beforeunload', function(e) {
+    if (hasChanges) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+  
+  // Initial render
+  renderList();
+})();
+</script>
+
+<style>
+.relative-ranking-container {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid var(--border);
+}
+
+.ranking-header {
+  margin-bottom: 16px;
+}
+
+.ranking-header h3 {
+  margin: 0 0 8px 0;
+}
+
+.factor-description {
+  color: var(--muted);
+  margin: 0 0 12px 0;
+  font-size: 14px;
+}
+
+.ranking-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ranking-legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-ranked::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+.legend-undefined::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: var(--warning);
+  border-radius: 3px;
+}
+
+.legend-noscore::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  border: 2px dashed var(--muted);
+  border-radius: 3px;
+}
+
+.ranking-list {
+  min-height: 200px;
+}
+
+.ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  cursor: grab;
+  transition: transform 0.1s, box-shadow 0.1s, background 0.15s;
+}
+
+.ranking-item:hover {
+  background: var(--bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.ranking-item.dragging {
+  opacity: 0.5;
+  transform: scale(1.02);
+}
+
+.ranking-item.zone-ranked {
+  border-left: 3px solid var(--accent);
+}
+
+.ranking-item.zone-undefined {
+  border-left: 3px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 5%, var(--surface));
+}
+
+.ranking-item.zone-no_score {
+  border-left: 3px dashed var(--muted);
+  opacity: 0.6;
+}
+
+.rank-number {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: white;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.ranking-item.zone-undefined .rank-number {
+  background: var(--warning);
+}
+
+.ranking-item.zone-no_score .rank-number {
+  background: var(--muted);
+}
+
+.story-title {
+  flex: 1;
+  font-weight: 500;
+}
+
+.story-answer {
+  padding: 4px 10px;
+  background: var(--bg);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Zone Dividers */
+.zone-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 12px 0;
+}
+
+.zone-divider .divider-line {
+  flex: 1;
+  height: 2px;
+}
+
+.zone-divider .divider-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  padding: 4px 12px;
+  background: var(--surface);
+  border-radius: 4px;
+}
+
+.undefined-divider .divider-line {
+  background: linear-gradient(to right, transparent, var(--warning), var(--warning), transparent);
+}
+
+.undefined-divider .divider-label {
+  color: var(--warning);
+  border: 1px dashed var(--warning);
+}
+
+.no-score-divider .divider-line {
+  background: linear-gradient(to right, transparent, var(--muted), var(--muted), transparent);
+}
+
+.no-score-divider .divider-label {
+  color: var(--muted);
+  border: 1px dashed var(--muted);
+}
+</style>
+{% else %}
+<div class="empty-state" style="padding: 60px 20px;">
+  <div class="empty-icon">📊</div>
+  <div class="empty-text">Select a factor to start ranking stories</div>
+  <div class="empty-hint">Choose Value or Cost factors above, then select a specific factor from the dropdown</div>
+</div>
+{% endif %}
+{% endif %}{# closes the "if value_factors or cost_factors" #}
+{% endblock %}

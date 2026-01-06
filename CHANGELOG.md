@@ -5,6 +5,78 @@ All notable changes to WoS (WSJF on Steroids) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-01-06
+
+### Added
+- **Hybrid Scoring Mode**: Each factor can now be set to "absolute" or "relative" scoring mode
+  - `scoring_mode` field added to `ValueFactor` and `CostFactor` models
+  - Absolute mode (default): uses answer score directly (1-5, etc.)
+  - Relative mode: uses relative rankings (rank 1 = best)
+  - Configure via Django Admin with inline editing
+  - Migration 0020 adds the new field
+  
+- **Hybrid Report** (`/backlog/relative/report/`): Combines both scoring methods
+  - Factors set to "absolute" contribute their answer score
+  - Factors set to "relative" contribute normalized rankings
+  - Same WSJF formula: Value ÷ Cost
+  - Tooltips show which mode each factor uses
+  
+- **Normalized Relative Scoring**: Relative ranks are now scaled to match absolute scores
+  - Uses each factor's answer options to determine score range (e.g., 1-5)
+  - Rank 1 → max score, Rank N → min score (linear interpolation)
+  - For value factors: rank 1 = highest score (best)
+  - For cost factors: rank 1 = lowest score (best/cheapest)
+  - Tooltips show: `#rank/total → normalized_score`
+  
+### Changed
+- **Relative Ranking page** now only shows factors with `scoring_mode='relative'`
+  - Displays message when no factors are set to relative mode
+  - Link to Django Admin to configure factor scoring modes
+  
+- **Three-Zone Ranking System** for relative ranking:
+  - **Ranked** (above first divider): Stories with assigned ranks (1, 2, 3...)
+  - **Undefined** (between dividers): Stories not yet ranked - need attention
+  - **No Score** (below second divider): Stories where the factor doesn't apply
+  - Rank values: positive integer = ranked, `NULL` = undefined, `0` = no score
+  - Visual distinction with color-coded borders and badges
+
+### Fixed
+- **Empty story list bug**: New relative factors now show all stories
+  - Score records are auto-created for stories missing them
+  - Previously, new factors showed no stories until absolute scores were set
+  
+- **Admin improvements**: 
+  - `scoring_mode` column added to ValueFactor and CostFactor list views
+  - Inline editing of scoring mode directly from list view
+  - Filter by scoring mode
+
+## [2.2.0] - 2026-01-05
+
+### Added
+- **Relative Ranking**: New page for ranking stories relative to each other
+  - Access via 🔢 Rank button in navigation
+  - Select Value or Cost factors to rank stories against
+  - Drag-and-drop interface for intuitive ranking
+  - Stories grouped by their absolute answer score
+  - Ranked stories persist per factor via `relative_rank` field
+  - Save rankings with visual feedback
+  - Reset rankings to reload from database
+  - Warning when leaving with unsaved changes
+  
+- **Relative Report**: New report page using relative rankings
+  - Access via `/backlog/relative/report/` or from Relative Ranking page
+  - Same WSJF formula: (sum of value section averages) ÷ (sum of cost section averages)
+  - Value factor ranks are inverted (rank 1 → highest score)
+  - Cost factor ranks used directly (rank 1 = lowest cost = best)
+  - Tooltips showing factor breakdown per section
+  - Row coloring based on result (green = best, red = worst)
+  - Sortable columns, status and label filters
+  
+### Changed
+- **New model fields**: Added `relative_rank` to both `StoryValueFactorScore` and `StoryCostFactorScore` models
+  - Integer field to store relative position when ranking stories against each other
+  - Migration 0019 adds the new fields
+
 ## [2.1.0] - 2026-01-04
 
 ### Added

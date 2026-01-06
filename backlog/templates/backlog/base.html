@@ -23,6 +23,7 @@
                 <a class="btn" href="{% url 'backlog:dashboard' %}" title="Stories needing attention">📊 Dashboard</a>
                 <a class="btn" href="{% url 'backlog:stories' %}" title="View all stories">📋 Stories</a>
                 <a class="btn" href="{% url 'backlog:report' %}" title="WSJF Score Report">📈 Report</a>
+                <a class="btn" href="{% url 'backlog:relative' %}" title="Relative Ranking">🔢 Rank</a>
                 <a class="btn" href="{% url 'backlog:kanban' %}" title="Kanban Board">📌 Kanban</a>
                 <a class="btn" href="{% url 'backlog:wbs' %}" title="Work Breakdown & Dependencies">🔗 WBS</a>
             </nav>
@@ -47,7 +48,7 @@
     </main>
     <footer>
         <div class="footer-content">
-            <span>WoS v1.2.0</span>
+            <span>WoS v2.3.0</span>
             <span class="footer-separator">•</span>
             <a href="{% url 'backlog:changelog' %}">Changelog</a>
             <span class="footer-separator">•</span>

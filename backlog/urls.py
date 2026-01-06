@@ -44,6 +44,11 @@ urlpatterns = [
     # Labels API
     path('labels/create/', views.create_label, name='create_label'),
     
+    # Relative ranking
+    path('relative/', views.relative_ranking, name='relative'),
+    path('relative/save/', views.relative_ranking_save, name='relative_save'),
+    path('relative/report/', views.relative_report_view, name='relative_report'),
+    
     # Utility
     path('health/', views.health, name='health'),
     path('changelog/', views.changelog, name='changelog'),

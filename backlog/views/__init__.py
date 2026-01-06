@@ -17,6 +17,8 @@ All view functions are re-exported here for backwards compatibility with urls.py
 from .dashboard import dashboard
 from .health import health
 from .kanban import kanban_move, kanban_view
+from .relative import relative_ranking, relative_ranking_save
+from .relative_report import relative_report_view
 from .report import _calculate_story_score, report_view
 from .stories import bulk_action, create_label, create_story_refine, refine_story, story_list
 from .wbs import wbs_add_dependency, wbs_remove_dependency, wbs_view
@@ -41,6 +43,10 @@ __all__ = [
     'wbs_view',
     'wbs_add_dependency',
     'wbs_remove_dependency',
+    # Relative ranking
+    'relative_ranking',
+    'relative_ranking_save',
+    'relative_report_view',
     # Health
     'health',
     # Changelog
