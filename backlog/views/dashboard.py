@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from ..models import (
     CostFactor,
+    Label,
     Story,
     StoryCostFactorScore,
     StoryDependency,
@@ -37,6 +38,16 @@ def dashboard(request):
     # Handle housekeeping cleanup actions
     if request.method == 'POST':
         action = request.POST.get('action')
+
+        if action == 'quick_create_story':
+            title = (request.POST.get('title') or '').strip()
+            if not title:
+                messages.error(request, 'Please provide a story name.')
+                return redirect('backlog:dashboard')
+
+            story = Story.objects.create(title=title)
+            messages.success(request, f'Created story “{story.title}”.')
+            return redirect('backlog:story_detail', story.pk)
         
         if action == 'cleanup_orphan_value_scores':
             # Delete value scores where the story doesn't exist
@@ -279,6 +290,21 @@ def dashboard(request):
             'severity': 'info',
         })
     
+    # 7b. Labels with no stories (housekeeping reminder)
+    unused_labels_qs = Label.objects.annotate(story_count=Count('stories')).filter(story_count=0).order_by('category__name', 'name')
+    unused_labels_count = unused_labels_qs.count()
+    if unused_labels_count > 0:
+        housekeeping['issues'].append({
+            'type': 'unused_labels',
+            'icon': '🏷️',
+            'title': 'Labels Without Stories',
+            'description': 'Labels that are not attached to any stories. Remove unused labels or assign them.',
+            'count': unused_labels_count,
+            'items': [f"{label.icon} {label.name} ({label.category.name})" for label in unused_labels_qs],
+            'action': None,
+            'severity': 'info',
+        })
+
     # 8. Duplicate dependencies (same dependency recorded multiple times)
     from django.db.models import Count as DjCount
     dup_deps = StoryDependency.objects.values('story', 'depends_on').annotate(

@@ -5,6 +5,18 @@ All notable changes to WoS (WSJF on Steroids) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-01-11
+
+### Added
+- **Dashboard Quick Create**: Add a story by title directly from the dashboard and jump straight to refinement.
+- **Housekeeping Labels**: Housekeeping now surfaces all labels without stories (ordered by category/name) to clean up unused labels.
+
+### Changed
+- **License**: Project relicensed to GNU AGPL v3; README badge and license section updated accordingly.
+
+### Fixed
+- **Housekeeping Listing**: Unused labels are no longer truncated, ensuring visibility of every label needing attention.
+
 ## [2.3.0] - 2026-01-06
 
 ### Added

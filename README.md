@@ -4,7 +4,7 @@ A Django web application for managing product backlogs using **WSJF (Weighted Sh
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Django](https://img.shields.io/badge/Django-5.x-green.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)
 
 ## Overview
 
@@ -218,7 +218,7 @@ Contributions are welcome! Please:
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](../LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0. See the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 

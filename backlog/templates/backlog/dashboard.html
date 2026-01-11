@@ -16,6 +16,23 @@
   scoring, refinement, or have become stale. Address these to keep your backlog healthy.
 </div>
 
+<!-- Quick Create Story -->
+<div class="dashboard-section quick-create">
+  <div class="section-header">
+    <h3>⚡ Quick Create Story</h3>
+    <span class="section-count">Add title only</span>
+  </div>
+  <div class="section-hint">Create a story fast; you can refine details and scoring next.</div>
+  <form method="post" class="quick-create-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="quick_create_story">
+    <div class="quick-create-fields">
+      <input type="text" name="title" placeholder="Story title" required>
+      <button type="submit" class="btn">Create → Refine</button>
+    </div>
+  </form>
+</div>
+
 <!-- Summary Cards -->
 <div class="dashboard-summary">
   <div class="summary-card summary-review">
@@ -663,6 +680,29 @@
   color: var(--muted);
   font-style: italic;
   padding-top: 4px;
+}
+
+/* Quick Create */
+.quick-create input[type="text"] {
+  width: 100%;
+  max-width: 480px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.quick-create-fields {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.quick-create .btn {
+  padding: 10px 14px;
 }
 
 .housekeeping-action {
